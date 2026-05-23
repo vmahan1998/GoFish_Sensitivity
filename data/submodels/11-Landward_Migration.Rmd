@@ -1,0 +1,651 @@
+# Landward Movement
+```{r, include=FALSE}
+current_chapter <- "11-Landward_Migration.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+This function simulates landward movement for fish moving upstream through riverine and estuarine systems, where agents adjust movement based on local water velocity, energetic condition, and the relative difficulty of swimming in a given flow. Within this submodel, upstream movement emerges from the interaction between hydrodynamic forcing, body size, and energetic state, as agents navigate spatially variable flow fields where velocity and depth constrain swimming difficulty and energetic cost. These relationships are consistent with allometric scaling in aquatic organisms [@brown_toward_2004] and observed behavioral responses of fish to hydrodynamic conditions during movement [@gibson_selective_2001].
+
+Movement is structured through a least-cost framework that is recalculated under changing hydrodynamic conditions, where agents respond locally to gradients in flow resistance and path difficulty rather than optimizing globally. This formulation allows movement pathways, travel time, and energy expenditure to emerge dynamically from repeated interactions between organismal capacity and the hydrodynamic environment.
+
+## Purpose
+
+The purpose of this submodel is to represent upstream movement under realistic spatial hydrodynamic resistance. Agents evaluate flow velocity, movement difficulty, body condition, and patch level travel costs before advancing along a least cost path toward a home location.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+**Spatial Unit:** Patch (3 m x 3 m resolution)\
+**Temporal Unit:** 5 minute time steps (tick)
+
+### Global Variables
+
+| Variable | Definition |
+|:----------------------------------:|:----------------------------------:|
+| **max-seaward-velocity** | Maximum seaward directed velocity in the domain, used for normalization. |
+| **max-landward-velocity** | Maximum landward directed velocity in the domain. |
+
+### Patch Variables
+
+| Variable | Definition |
+|:----------------------------------:|:----------------------------------:|
+| **velocity** | Depth averaged hydrodynamic velocity at the patch. |
+| **depth** | Water depth at the patch. |
+| **patch-terrain** | Indicates whether the patch is water or land. |
+| **cost-to-home** | Patch level cost field producing a least cost corridor. |
+| **visits-by-alewife** | Number of times the agent visits the patch. |
+| **ticks-spent-alewife** | Time spent on the patch. |
+
+### Agent Variables
+
+| Variable | Definition |
+|:----------------------------------:|:----------------------------------:|
+| **weight** | Body mass of the fish. |
+| **speed** | Current swimming speed. |
+| **prev-speed** | Previous time step swimming speed. |
+| **max-speed** | Maximum sustained speed. |
+| **min-speed** | Minimum allowable speed. |
+| **swim-efficiency** | Scaling factor for acceleration and deceleration. |
+| **difficulty-factor** | Difficulty of movement under local velocity conditions. |
+| **planned-path** | Sequence of patches in the least cost route. |
+| **home-patch** | Destination patch for movement. |
+| **trail** | Record of patches visited by the agent. |
+
+## Process Overview and Scheduling
+
+1.  Compute swimming difficulty from hydrodynamic velocity and body
+    size.
+
+2.  Calculate swimming speed using desired-speed, velocity influence,
+    and acceleration limits.
+
+3.  Evaluate the least cost field and construct a path to the home
+    patch.
+
+4.  Move along the path for a distance proportional to swimming speed.
+
+5.  Record patch visitation and time spent.
+
+## Design Concepts
+
+**Basic Principles:** Hydrodynamic constraints, difficulty scaling, and
+body condition influence agent movement.
+
+**Emergence:** movement routes, temporal occupancy, and movement speed
+emerge from repeated interactions of flow and difficulty.
+
+**Objectives:** Agents attempt to reach the home patch but do not
+optimize globally. Movement follows the least cost route at each step.
+
+**Sensing:** Agents sense velocity and depth of the local and
+neighboring patches.
+
+**Observation:** Paths, timing, and residency can be monitored
+chronologically.
+
+## Initialization
+
+|       Variable        |    Initial Value    |          Justification           |
+|:----------------------:|:----------------------:|:----------------------:|
+|     **velocity**      |    user-defined     |     Hydrodynamic input data.     |
+|      **weight**       |  species-specific   | Required for difficulty scaling. |
+|     **max-speed**     |  species-specific   |    Physiological constraint.     |
+|     **min-speed**     |  species-specific   |     Prevents speed collapse.     |
+|  **swim-efficiency**  | species or constant |   Controls acceleration rate.    |
+| **difficulty-factor** |          1          |   Neutral starting difficulty.   |
+|    **prev-speed**     |   starting speed    |     Smooth initial movement.     |
+
+## Submodels
+
+### Swimming Difficulty
+
+Swimming difficulty reflects the hydrodynamic effort required for the
+agent to move through its current patch. Velocity is normalized between
+the maximum observed landward and seaward velocities:
+
+$$
+ V_{\text{normalized}} = \frac{V_{\text{patch}} - V_{\min}}{V_{\max} - V_{\min}}  \hspace{2cm} \text{(C.64)} 
+$$
+
+Where:
+
+-   $V_{normalized}$ is the normalized patch velocity (dimensionless).
+-   $V_{patch}$ is the depth-averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $V_{min}$ is the minimum observed velocity (m s⁻¹).
+-   $V_{max}$ is the maximum observed velocity (m s⁻¹).
+
+This normalized velocity is scaled by relative body size
+$M_{\text{agent}} / M_{\max}$ and raised to a scaling exponent $k$
+[@brown_toward_2004; @gibson_selective_2001]:
+
+$$
+ Df_{\text{raw}} = 
+\left(
+\frac{V_{\text{normalized}}}{A_{\text{mass}} / M_{\max}}
+\right)^k  \hspace{2cm} \text{(C.65)} 
+$$
+
+Where:
+
+-   $Df_{raw}$ is the raw hydrodynamic difficulty prior to mapping
+    (dimensionless).
+-   $V_{normalized}$ is the normalized patch velocity (m s⁻¹).
+-   $A_{mass}$ is an agent's body mass used for allometric and energetic
+    scaling (g).
+-   $M_{max}$ is the maximum body mass across the population (g).
+-   $k$ is the energy scaling exponent (dimensionless).
+
+Difficulty is then mapped onto the one to ten range:
+
+$$
+ D_f = 1 + 9 \cdot Df_{\text{raw}}  \hspace{2cm} \text{(C.66)} 
+$$
+
+Where:
+
+-   $D_f$ is the swimming difficulty index (dimensionless).
+-   $Df_{raw}$ is the raw hydrodynamic difficulty prior to mapping
+    (dimensionless).
+
+and constrained:
+
+$$
+ D_f \in [1, 10]  \hspace{2cm} \text{(C.67)} 
+$$
+
+Where:
+
+-   $D_f$ is the mapped swimming difficulty index (dimensionless, range
+    1–10).
+
+Difficulty increases when:
+
+-   $M_{\text{agent}}$ is small
+-   $|V_{\text{patch}}|$ approaches its maximum value
+-   flow opposes movement
+
+### Swimming Speed
+
+Swimming speed depends on energetic condition, hydrodynamic difficulty,
+and the effect of local flow. The agent first computes an energy factor:
+
+$$
+ E_{\text{factor}} = \frac{E_{\text{agent}}}{100}  \hspace{2cm} \text{(C.68)} 
+$$
+
+Where:
+
+-   $E_{factor}$ is the normalized energy level of the agent
+    (dimensionless).
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+
+Velocity impact from hydrodynamics is:
+
+$$
+ V_{\text{impact}} = k \cdot V_{\text{patch}} \cdot 300  \hspace{2cm} \text{(C.69)} 
+$$
+
+Where:
+
+-   $V_{impact}$ is the flow contribution to desired swimming speed (m
+    tick⁻¹).
+-   $k$ is the energy scaling exponent used in velocity, difficulty, and
+    osmoregulation terms (dimensionless).
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $300$ is the timestep conversion from seconds to one tick (s/tick,
+    e.g., 5 minutes).
+
+The desired swimming speed is:
+
+$$
+ V_{\text{desired}} =
+\frac{V_{\max} \cdot E_{\text{factor}}}{D_f}
++ V_{\text{impact}}  \hspace{2cm} \text{(C.70)} 
+$$
+
+Where:
+
+-   $V_{desired}$ is the desired swimming speed before constraints (m
+    tick⁻¹).
+-   $V_{max}$ is the maximum observed velocity (m tick⁻¹).
+-   $E_{factor}$ is the normalized energy level of the agent
+    (dimensionless).
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+-   $V_{impact}$ is the flow contribution to desired swimming speed (m
+    tick⁻¹).
+
+Speed is constrained between a minimum and maximum:
+
+$$
+ V_{\text{desired}} 
+= \min(V_{\max}, \max(V_{\min}, V_{\text{desired}}))  \hspace{2cm} \text{(C.71)} 
+$$
+
+Where:
+
+-   $V_{desired}$ is the desired swimming speed before constraints (m
+    tick⁻¹).
+-   $V_{max}$ is the maximum observed velocity (m tick⁻¹).
+-   $V_{min}$ is the minimum observed velocity (m tick⁻¹).
+
+Acceleration is smoothed using the previous speed:
+
+$$
+ \Delta V_{max} = 0.5 \cdot swim_{Eff}  \hspace{2cm} \text{(C.72)} 
+$$
+
+Where:
+
+-   $\Delta V_{max}$ is the maximum allowable speed change per tick (m
+    s⁻¹/tick).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (%).
+
+If $|V_{\text{desired}} - V_{\text{prev}}| > \Delta V_{\max}$,where
+$V_{prev}$ is the previous speed then speed moves gradually toward the
+desired value. Otherwise speed is set directly.
+
+### Path Based Movement
+
+Landward movement uses a least cost routing strategy instead of direct
+vector movement. The number of patches traversed in a tick is based on
+swimming speed:
+
+$$
+ D_{travel} = \frac{A_{speed}}{3}  \hspace{2cm} \text{(C.73)} 
+$$
+
+Where:
+
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $A_{speed}$ is the actual swimming speed used for movement (m
+    tick⁻¹).
+
+Movement follows:
+
+1.  compute cost-to-home
+2.  generate a path using decreasing cost
+3.  move through the first $\lceil \mathrm{travel\_distance} \rceil$
+    patches
+4.  record patch visits and time spent
+5.  append patch-here to the trail if new location
+
+### Travel Cost
+
+Travel cost for a candidate patch incorporates velocity magnitude,
+slope, and difficulty:
+
+$$
+ \text{cost}_{\text{raw}}
+= |V_{\text{patch}}|
++ 0.5 \cdot \max(0, \Delta \text{depth})  \hspace{2cm} \text{(C.74)} 
+$$
+
+Where:
+
+-   $cost_{raw}$ is the base travel cost including velocity and slope
+    (dimensionless).
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $\Delta d$ is the change in depth between patches (m).
+
+Difficulty multiplies the base cost:
+
+$$
+ \text{cost}
+= \text{cost}_{\text{raw}} \cdot D_f  \hspace{2cm} \text{(C.75)} 
+$$
+
+Where:
+
+-   $cost$ is the difficulty-scaled travel cost per patch (energy
+    units).
+-   $cost_{raw}$ is the base travel cost including velocity and slope
+    (dimensionless).
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+
+This produces a cost-to-home field representing hydrodynamic resistance
+(dimensionless), which is used for route selection.
+
+### Swimming Energy
+
+Swimming incurs a metabolic cost that scales with base swimming cost,
+difficulty, and swim efficiency.
+
+Let $\beta = 0.75$.\
+Let the effective multiplier be:
+
+$$
+ M_{swim} = \frac{D_f}{swim_{Eff}}  \hspace{2cm} \text{(C.76)} 
+$$
+
+Where:
+
+-   $M_{swim}$ is the swimming energy multiplier (dimensionless).
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (dimensionless).
+
+Where lower efficiency results in higher energetic cost.
+
+Energy expenditure is:
+
+$$
+ E_{\text{swim}} = swim_{base} \cdot M_{swim}^\beta  \hspace{2cm} \text{(C.77)} 
+$$
+
+Where:
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) patch⁻¹).
+-   $M_{swim}$ is the swimming energy multiplier (dimensionless).
+-   $\beta$ is the exponent controlling swimming cost scaling
+    (dimensionless).
+
+Total energy is reduced accordingly:
+
+$$
+ E_{\text{agent}} = \max(0, E_{\text{agent}} - E_{\text{swim}})  \hspace{2cm} \text{(C.78)} 
+$$
+
+Where:
+
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+
+Higher difficulty and lower swim efficiency increase metabolic cost.
+
+## Netlogo Implementation
+
+```{netlogo}
+;; ===================================================================
+;;  LANDWARD MOVEMENT + HYDRODYNAMIC SWIMMING SUBMODEL DECLARATIONS
+;; ===================================================================
+
+globals [
+
+  ;; Velocity normalization bounds
+  max-seaward-velocity
+  max-landward-velocity
+]
+
+patches-own [
+
+  ;; Environmental attributes
+  velocity
+  depth
+  patch-terrain   ;; "water" or "land"
+
+  ;; Least-cost routing fields
+  cost-to-home
+  cost-to-sea
+  cost-to-prey
+
+  ;; Tracking fish patch-level behavior
+  visits-by-fish
+  ticks-spent-fish
+]
+
+turtles-own [
+
+  ;; Body condition
+  weight
+
+  ;; Swimming behavior
+  speed
+  prev-speed
+  max-speed
+  min-speed
+  swim-efficiency
+
+  ;; Hydrodynamic resistance
+  difficulty-factor
+
+  ;; Energetics
+  E-swim
+  swim-base
+
+  ;; movement targets
+  home-patch
+  migration-patch
+
+  ;; Movement memory
+  planned-path
+  trail
+  previous-patch
+  previous-x
+  previous-y
+]
+
+
+;; ===================================================================
+;;  SWIMMING DIFFICULTY (LANDWARD)
+;; ===================================================================
+
+to calculate-difficulty-landward
+  
+  let M-max max [weight] of breed      ;; largest fish in population
+  let M-agent weight                   ;; focal individual
+  let V-max max-seaward-velocity
+  let V-min max-landward-velocity
+  let k 0.75                           ;; scaling exponent
+
+  ;; Normalize velocity
+  let normalized-velocity (velocity - V-min) / (V-max - V-min)
+
+  ;; Difficulty from normalized velocity + size ratio
+  let Df-raw (normalized-velocity / (M-agent / M-max)) ^ k
+  
+  ;; Scale to range 1–10
+  set difficulty-factor (1 + 9 * Df-raw)
+  set difficulty-factor max list 1 (min list 10 difficulty-factor)
+end
+
+
+;; ===================================================================
+;;  SWIMMING SPEED (LANDWARD)
+;; ===================================================================
+
+to calculate-swimming-speed-landward
+  
+  let k -0.75                                    ;; velocity influence
+  let energy-factor (energy / 100)               ;; 0–1 scale
+  let velocity-impact (k * velocity * 300)       ;; 5-min timestep scaling
+
+  ;; Preliminary target speed
+  let desired-speed 
+    (max-speed * energy-factor / difficulty-factor)
+      + velocity-impact
+
+  ;; Clamp desired speed to biologically realistic bounds
+  set desired-speed min list max-speed (max list min-speed desired-speed)
+
+  ;; Smooth acceleration / deceleration
+  let max-speed-change 0.5
+  set max-speed-change (max-speed-change * swim-efficiency)
+
+  if abs(desired-speed - prev-speed) > max-speed-change [
+    if desired-speed > prev-speed [
+      set speed prev-speed + max-speed-change
+    ]
+    if desired-speed < prev-speed [
+      set speed prev-speed - max-speed-change
+    ]
+  ]
+
+  if abs(desired-speed - prev-speed) <= max-speed-change [
+    set speed desired-speed
+  ]
+
+  set prev-speed speed
+end
+
+
+;; ===================================================================
+;;  LEAST-COST ROUTING TO HOME (LANDWARD)
+;; ===================================================================
+
+to calculate-cost-to-home [homing-patch]
+
+  ;; initialize routing fields
+  ask home-patch  [ set cost-to-home 0 ]
+  ask patch-here  [ set cost-to-home 1e9 ]
+
+  let frontier (list home-patch)
+  let df difficulty-factor                 ;; hydrodynamic penalty
+
+  while [not empty? frontier] [
+    let current first frontier
+    set frontier but-first frontier
+
+    ask current [
+      let current-cost cost-to-home
+      
+      ask neighbors4 with [patch-terrain = "water"] [
+        
+        let travel-cost compute-travel-cost current self df
+        let new-cost current-cost + travel-cost
+
+        if new-cost < cost-to-home [
+          set cost-to-home new-cost
+          set frontier lput self frontier
+        ]
+      ]
+    ]
+  ]
+end
+
+
+;; ===================================================================
+;;  BUILD OPTIMAL PATH ENTIRELY FROM COST-FIELD
+;; ===================================================================
+
+to-report build-path [current-patch homing-patch]
+
+  let path (list current-patch)
+  let cur current-patch
+  let max-steps 2000
+
+  while [cur != homing-patch and max-steps > 0] [
+    set max-steps max-steps - 1
+
+    let candidates [neighbors4] of cur
+    set candidates candidates with [
+      patch-terrain = "water" and
+      cost-to-home < [cost-to-home] of cur
+    ]
+
+    if not any? candidates [
+      report path
+    ]
+
+    let next-patch min-one-of candidates [cost-to-home]
+    set path lput next-patch path
+    set cur next-patch
+  ]
+
+  report path
+end
+
+
+;; ===================================================================
+;;  TRAVEL COST UNDER HYDRODYNAMIC RESISTANCE
+;; ===================================================================
+
+to-report compute-travel-cost [from-patch to-patch df]
+
+  ;; velocity resistance
+  let raw-vel [velocity] of to-patch
+  let velocity-resistance 
+      ifelse-value is-number? raw-vel [abs raw-vel] [0]
+
+  ;; depth slope component
+  let from-level [depth] of from-patch
+  let to-level   [depth] of to-patch
+  let slope 0
+
+  if (is-number? from-level and is-number? to-level) [
+    set slope max list 0 (to-level - from-level)
+  ]
+
+  ;; hydrodynamic cost + slope penalty
+  let base-cost velocity-resistance + (0.5 * slope)
+
+  ;; difficulty multiplier
+  let df2 ifelse-value is-number? df [df] [1]
+
+  report max list 0 (base-cost * df2)
+end
+
+
+;; ===================================================================
+;;  LANDWARD MOVEMENT — PATH EXECUTION
+;; ===================================================================
+
+to migrate-landward
+  
+  let travel-distance (speed / 3)
+  let path build-path patch-here home-patch
+  set planned-path path
+  
+  if not empty? path [
+
+    let steps-to-move ceiling travel-distance
+    let move-patches sublist path 0 (min list steps-to-move length path)
+    
+    let old-patch patch-here
+
+    foreach move-patches [ p ->
+
+      ;; Record patch visitation
+      if p != old-patch [
+        ask p [ set visits-by-alewife visits-by-alewife + 1 ]
+        set old-patch p
+      ]
+
+      ;; Move into patch
+      face p
+      move-to p
+
+      ask p [
+        set ticks-spent-alewife ticks-spent-alewife + 1
+      ]
+    ]
+  ]
+
+  ;; Add patch to historical trail
+  if not member? patch-here trail [
+    set trail lput patch-here trail
+  ]
+end
+
+
+;; ===================================================================
+;;  UNIVERSAL SWIMMING ENERGY COST
+;; ===================================================================
+
+to calculate-swim-energy
+  
+  let beta 0.75
+
+  let energy-multiplier 
+      (difficulty-factor * (1 / swim-efficiency))
+
+  set E-swim 
+      (swim-base * (energy-multiplier ^ beta))
+
+  set energy max list 0 (energy - E-swim)
+end
+```

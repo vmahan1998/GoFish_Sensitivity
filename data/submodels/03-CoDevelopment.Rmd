@@ -1,0 +1,333 @@
+# Co-Development of ABMs: Penobscot Estuary Community Workshop August 6, 2025
+```{r, include=FALSE}
+current_chapter <- "03-CoDevelopment.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+This page documents how a participatory workshop informed the functions within this coding library, the representation of physiological processes, behaviors of migratory fish, and their interactions within an estuary. The purpose of this page is to showcase the value added by co-development and increase transparency about the development of this coding library.
+
+```{=html}
+<div style="text-align:left;">
+  <img src="images/IMG_9450.jpg"
+alt="Penoscot River Estuary Community Workshop"
+       style="width:800px; border-radius:12px;
+              box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+</div>
+```
+
+The Penobscot Estuary Community Modeling Workshop was designed from the beginning as a co-development space for an agent based model to address mercury toxicity dynamics of anadromous fish within the estuary. The day invited Tribal collaborators, community members, managers, and researchers to shape the modeling objectives, including which species, processes, behaviors, and outputs the model should represent, and how those outputs should be represented in relation to contaminant exposure in the Penobscot River Estuary.
+
+## Core Co-Development Themes
+
+Several themes guided the design of the workshop and the way it connects to model development.
+
+-   **Shared problem framing.** The workshop centered a shared concern about mercury contamination in the Penobscot River and its effects on sea-run fish, subsistence access, and recreation use, rather than starting from a predefined modeling objective.
+
+-   **Attention to both internal and external processes.** Breakout discussions were split into two rounds, one for "internal" or biological functions of fish such as osmoregulation, thermoregulation, bioaccumulation, and resting, and the second round focused on "external processes" or external interactions with intra- or interspecific factors and environmental responses such as swimming, predation, foraging, and spawning. This structure maps directly onto modules detailed within this library.
+
+-   **Participant driven priorities.** Participants were asked which species were most important to understand for management of the system or species that should be prioritized based on community interest, which functions and interactions they believed to be relevant for understanding mercury toxicity in migratory fish, and how those behaviors should be represented.
+
+-   **Outputs that answer real questions.** Each participant had the opportunity to propose a question or hypothesis to test using the developed functions and select preferred outputs from the functions such as movement paths, exposure metrics, or habitat use. These wish-list requests now correspond to specific model output routines and visualizations.
+
+-   **Accessible language and shared vocabulary.** A glossary of terms translated physiological, hydrodynamic, and modeling concepts into accessible language. This glossary can be found at the end of this document and is intended to support a range of readers.
+
+-   **Iterative relationships, not a single event.** The workshop was framed as one step in an ongoing partnership. Feedback forms, follow-up contact options, and explicit invitations for later review are built into the process.
+
+## Workshop Development
+
+### Pre-Workshop Collaboration Steps
+
+Planning the workshop involved months of coordination with partners, including the Penobscot Nation, faculty and staff at the University of Maine, and federal collaborators. The planning process itself was a first stage of co-development.
+
+Key steps included:
+
+-   **Clarifying objectives with partners.** Early conversations identified contamination in the Penobscot River, migratory fish, and access to safe subsistence resources as the shared focus. Partners helped guide agenda development, identify potential participants of interest, and identify community outputs of interest to support Tribal management. Their suggestions were used when conducting outreach.
+
+-   **Aligning model scope with community priorities.** The agenda was constructed so that introductory talks on Penobscot Nation natural resource management and contaminants of interest, an overview of estuary dynamics (connection of fish + physical processes + contamination), and an introduction to agent based modeling were followed by interactive surveys and break-out discussions. This allowed participants to identify anadromous species, behaviors, and processes of interest, which then feed directly into the model design.
+
+-   **Preparing interactive polls and prompts.** A Mentimeter survey was developed to help participants identify priority species, important environmental drivers, and fish behaviors that shape exposure. These questions now map to the list of behaviors and parameters implemented in the model.
+
+[Question Example](materials/Mentimeter%20Survey_10.docx)
+
+-   **Designing materials for many kinds of learners.** Each participant received a notepad and workshop folder, which included a plain-language glossary, a participant agenda, a hypothesis and output worksheet, and a feedback form. These materials supported participants who learn best through reading, writing, discussion, or visual exploration. Break-out discussions were accompanied by visual demonstrations of function demos, allowing participants to directly address draft model functions for each behavior.
+
+Find examples below.\
+Note: these are presentations of functions before participant feedback. Updated functions in this library reflect changes informed by the workshop.
+
+```{=html}
+<style>
+.grid-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  grid-gap: 20px;
+  margin-top: 1.5em;
+}
+
+.grid-item {
+  padding: 18px;
+  border: 1px solid #d7d7d7;
+  border-radius: 12px;
+  background: #fcfcfc;
+  text-align: center;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.grid-item:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+}
+
+.grid-icon {
+  font-size: 45px;
+  margin-bottom: 10px;
+}
+
+.grid-item h4 {
+  margin-top: 0;
+  margin-bottom: 0.4em;
+  font-size: 1.15em;
+}
+
+.grid-item a {
+  display: block;
+  margin: 4px 0;
+  font-size: 0.95em;
+  text-decoration: none;
+  color: #2a4e8a;
+}
+
+.grid-item a:hover {
+  text-decoration: underline;
+}
+</style>
+
+<div class="grid-container">
+
+  <div class="grid-item">
+    <div class="grid-icon">💧</div>
+    <h4>Osmoregulation</h4>
+    <a href="materials/Osmoregulation_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Osmoregulation.pdf">Info Sheet</a>
+    <a href="materials/Osmoregulation_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">🌡️</div>
+    <h4>Thermoregulation</h4>
+    <a href="materials/Thermoregulation_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Thermoregulation.pdf">Info Sheet</a>
+    <a href="materials/Thermoregulation_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">☣️</div>
+    <h4>Bioaccumulation</h4>
+    <a href="materials/Bioaccumulation_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Bioaccumulation.pdf">Info Sheet</a>
+    <a href="materials/Bioaccumulation_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">😴</div>
+    <h4>Resting</h4>
+    <a href="materials/Resting_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Resting.pdf">Info Sheet</a>
+    <a href="materials/Resting_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">🐟➡️</div>
+    <h4>Movement</h4>
+    <a href="materials/Migration_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Migration.pdf">Info Sheet</a>
+    <a href="materials/Migration_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">🍽️</div>
+    <h4>Foraging</h4>
+    <a href="materials/Foraging_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Foraging.pdf">Info Sheet</a>
+    <a href="materials/Foraging_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">🐣</div>
+    <h4>Spawning</h4>
+    <a href="materials/Spawning_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Spawning.pdf">Info Sheet</a>
+    <a href="materials/Spawning_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+  <div class="grid-item">
+    <div class="grid-icon">🦈</div>
+    <h4>Predation</h4>
+    <a href="materials/Predation_Function.pdf">Demo</a>
+    <a href="materials/Anadromous_Fish_Behavior_Fact_Sheet_Predation.pdf">Info Sheet</a>
+    <a href="materials/Predation_Function_Output_Table_35.pdf">Output Table</a>
+  </div>
+
+</div>
+```
+
+### Identifying Participants of Interest
+
+Participant selection was guided by the goal of gathering diverse knowledge about the river and its fish.
+
+-   **Tribal Collaborators.** Representatives from the Penobscot Nation were invited to collaborate because the Penobscot River Estuary is the Ancestral Homeland of the Penobscot Nation and other Wabanaki Peoples. It was necessary to prioritize their concerns and support their management. We wanted to give them a platform to share their work and management perspectives on migratory fish and contamination. Indigenous people have sovereign rights to migratory species, which have been deeply impacted by contamination in the estuary.
+
+-   **Community Experts.** The workshop brought in local managers, fishermen, researchers, engineers, and students whose work focuses on estuarine dynamics, fisheries, remediation, and environmental management in the Penobscot, or who focus on anadromous fish.
+
+### Enticing Participants to Attend
+
+The invitations and overview materials emphasized that this was a hands-on, collaborative event where participant input would shape real model structure and outputs—not a passive lecture.
+
+[Copy of Invitation](materials/Penobscot%20Workshop%20Overview.pdf)
+
+Strategies included:
+
+-   **Clear framing.** The overview highlighted how tidal dynamics, fish behavior, and mercury contamination intersect in the Penobscot River, and described specific opportunities for participants to contribute knowledge during breakout sessions and wish-list activities. The invitation also emphasized that participants did not need any modeling experience—only their expertise and perspectives.
+
+-   **Concrete outcomes.** Participants could request a specific model output or test a hypothesis relevant to their interests, with results attempted to be shared after the workshop (as feasible within model limitations).
+
+-   **Relationship building.** The agenda previewed time for partnership discussions, highlighting opportunities to support Tribal priorities and future collaboration on management and research questions.
+
+### Selecting the Venue
+
+The workshop was held at the Innovation Media Research Center at the University of Maine, a space that could support immersive presentations and movement between small and large group activities.
+
+The venue allowed for:
+
+-   **A theater-style room with a large screen.** The introductory talks and interactive survey used a dark background, low lighting, and a large screen to create an immersive experience similar to an intimate concert hall, while still leaving space for questions and discussion.
+
+-   **A separate interactive space.** Round tables, easel pads, printed handouts, and discussion areas were set up in a second room for the world-café breakout sessions, allowing participants to interact and face one another in a conversation-style setting as they discussed each function.
+
+## Facilitating the Workshop
+
+### Agenda Activities
+
+The agenda combined presentations, interactive polls, world-café discussions, and reflection.
+
+Key components included:
+
+-   **Welcome, blessing, and introductions.** The day opened with a welcome and words from the Penobscot Nation, followed by introductions and an icebreaker activity asking participants why they attended and what they hoped to gain.
+
+-   **Map-based activities.** Participants could pin locations on a system-scale map, connecting their lived experience and knowledge to specific reaches of the river and estuary. This place-based interaction showcased lived knowledge and gave participants autonomy over the spatial representation of the system.
+
+-   **Penobscot Nation history and river overview.** A management representative of the Penobscot Nation, Dan Kircheis, provided management context for contaminants and migratory fish, grounding the model in current work conducted within the system.
+
+-   **Modeling overview and agent based model presentation.** Modeling presentations introduced the Penobscot system, key hydrodynamic and contaminant processes, and the rationale for an agent based approach. Examples of emergent behaviors and validation were shown on a large screen to make model dynamics visible and engaging.
+
+-   **Mentimeter priority setting.** Participants completed an interactive survey about priority species, important environmental drivers, and key behaviors. These responses were summarized live and used to frame the breakout sessions.
+
+-   **World café on internal fish processes.** Small rotating groups discussed processes such as osmoregulation, thermoregulation, bioaccumulation, and resting. Discussion leaders presented demos and recorded notes, which later informed how these processes are parameterized and sequenced within this library.
+
+-   **World café on external behaviors and conditions.** A second set of rotations focused on external functions such as foraging, movement, predation, and spawning. These conversations helped identify how fish interact with their environment and where and when the model should track exposure risk.
+
+-   **Wish list outputs.** Participants wrote down specific outputs they wanted from the model and the reasoning behind each request, including migration timing, exposure patterns, energy budgets, and habitat use. The goal is to incorporate as many of these outputs as possible to support subsequent management and research.
+
+[Hypothesis Form](materials/Workshop_Hypothesis_Model_Form_45.docx)
+
+-   **Model demo.** A short demonstration of the model interface supported visual learners and connected the function modules to emergent behaviors.
+
+-   **Partnership and next steps discussion.** The workshop closed with a short session on building partnerships and identifying community projects where the model could support ongoing work. This included relationship-building between participants and completion of a follow-up survey.
+
+[Participant Survey](materials/Penobscot%20Estuary%20Workshop%20Feedback%20FollowUp_35.docx)
+
+-   **Facilitation.** Facilitation roles were shared across a team of organizers and volunteers who kept time, prompted discussion, recorded notes, and supported logistics, which allowed the lead modeler to focus on listening and translating insights into model design.
+
+## After the Workshop
+
+### Incorporating Feedback
+
+Immediately following the workshop, participants were invited to fill out feedback forms on what they found most useful, what felt unclear or missing, and how future workshops or model development activities could be improved.
+
+Feedback is being used to:
+
+-   Refine explanations of agent based modeling and estuarine processes in the model interface and supporting documents, using more examples, more visuals, and clearer connections between field observations and model rules.
+
+-   Adjust the balance between presentation time and discussion time.
+
+-   Clarify how participant input has been integrated, so that people can see their contributions in the model structure and outputs rather than only in summary notes.
+
+### Post-Workshop Follow-Up
+
+Several tools support ongoing co-development after the workshop day itself. This work is still ongoing as products are completed and co-development of final materials continues.
+
+-   **Hypothesis and output forms.** The participant hypothesis and output form captured individual questions, preferred outputs, and desired scenarios. These forms now guide scenario design and output routines in the model (as much as feasible within model limitations and scope), and follow-up emails will share results with those who opted in.
+
+-   **Ongoing communication.** Participants who requested follow-up are being contacted with model updates, refinements, and opportunities to review model structure.
+
+-   **Follow-up survey.** The feedback form includes an option to receive a later survey on model results, which will allow participants to review outputs, comment on whether they find them credible and useful, and suggest further refinements.
+
+-   **Tech Transfer Webinar.** A planned webinar will support technology transfer of the completed model and products to workshop participants, allowing them to see how their input made it into the final product.
+
+-   **Integration into model documentation.** This co-development page, the glossary, and workshop-derived figures will be hosted alongside the developed functions to make the participatory process visible to anyone using or reviewing the simulations.
+
+### Acknowledgements
+
+The workshop and this co developed model were made possible by the time, knowledge, and care shared by workshop participants and organizers.
+
+#### Participants
+
+Ernie Atkinson\
+Andrea Casey\
+Devon Gleason\
+Heather Hamlin\
+John Hildebrand\
+Dan Kircheis\
+Dianne Kopec\
+John Kocik\
+Dan Kusnierz\
+Chuck Loring\
+Dan McCaw\
+Amelia McAvoy\
+Sasha Milsky\
+Elias Pinilla\
+Darren Ranco\
+Angie Reed\
+Lauren Ross\
+Justin Stevens\
+Joe Zydlewski
+
+#### Volunteers
+
+**Nicolas Cyr**\
+University of Maine
+
+**Saba Cyr**\
+University of Maine
+
+**Katherine Daza**\
+University of Maine
+
+**Joseph Dello Russo**\
+University of Maine
+
+**Nalika Lakmali**\
+University of Maine
+
+**Cristian Rojas**\
+University of Maine
+
+**Malavika Sudhakaran**\
+University of Maine
+
+**Kaylyn Zipp**\
+University of Maine
+
+#### Organizers:
+
+**Vanessa Quintana**\
+University of Maine; USACE Engineering Research and Development Center
+
+**Gayle Zydlewski**\
+University of Maine; NOAA Sea Grant
+
+**Katrina Armstrong**\
+University of Maine
+
+**Todd Swannack**\
+Texas State University; USACE Engineering Research and Development Center
+

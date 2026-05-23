@@ -1,0 +1,762 @@
+# Predation and Fleeing Behavior
+```{r, include=FALSE}
+current_chapter <- "15-Predation.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+This module simulates predator–prey interactions between striped bass (predators) and alewife (prey) during migratory and staging periods, representing encounters as localized behavioral interactions embedded within movement, schooling, and energetic state. Predators visually detect nearby prey based on proximity, visual range, gape limitation, and stomach capacity, initiate pursuit when energetically feasible, and consume prey within capture range. Prey respond through directional fleeing and short evasive movements, with escape responses propagating across nearby individuals through a patch-level alarm mechanism. The model tracks energetic costs of pursuit and escape, prey consumption events, and resulting spatial patterns of predation risk.
+
+The interaction structure is adapted from the NetLogo schooling and predation framework of [@dobon_netlogo_2018], extended here by linking chase, escape, and capture outcomes to hydrodynamic movement, energetic cost, and contaminant transfer. Predator–prey interactions are inherently spatial and emerge from movement and local overlap among individuals, where encounter rates are governed by proximity and relative motion through the environment [@northfield_spatial_2017]. These interactions follow established predator–prey theory in which consumption arises from encounter processes and functional responses linking prey availability to predator intake [@diz-pita_predatorprey_2021], allowing predation risk, prey displacement, predator foraging success, and contaminant uptake to emerge dynamically rather than being imposed as fixed mortality or feeding rates.
+
+## Purpose and Patterns
+
+This submodel captures behaviorally realistic predator–prey dynamics relevant to estuarine migration and staging.
+
+-   Prey initiate fleeing when striped bass are within a defined visual neighborhood and prey have sufficient energy to respond.
+
+-   Predators initiate pursuit when prey are visible and the predator is not constrained by energetic state or stomach capacity.
+
+-   Fleeing behavior changes prey movement mode and overrides normal migration movement.
+
+-   Predation events occur when predators and prey co locate within a capture neighborhood and prey meet gape constraints.
+
+-   Predation risk hotspots emerge from the overlap of predator movement, prey distribution, and hydrodynamic movement constraints.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+**Spatial Unit:** Patch (3 m x 3 m resolution)\
+**Temporal Unit:** 5 minute time steps (tick)
+
+### Patch Variables
+
+| Variable Name | Definition |
+|------------------------------------|------------------------------------|
+| `patch-terrain` | Patch classification used to restrict movement to water patches. |
+| `prey-eaten-in-patch` | Count of prey consumed in a patch. |
+| `visits-by-alewife` | Cumulative count of prey patch visits, used for exposure and space use summaries. |
+| `ticks-spent-alewife` | Cumulative time spent by prey on a patch. |
+
+### Prey: Agent Variables
+
+| Variable Name | Definition |
+|------------------------------------|------------------------------------|
+| `fleeing?` | Boolean indicator of whether the prey is actively fleeing. |
+| `energy` | Energetic state used to determine whether prey can flee and to regulate behavior switching. |
+| `speed` | Current movement speed used in the swim procedure. |
+| `max-speed` | Maximum sustained swim speed. |
+| `vision-distance` | Detection or interaction distance used in predator encounter checks. |
+| `planned-path` | Stored movement path used during fleeing movement. |
+| `trail` | List of visited patches retained for optional visualization. |
+| `previous-patch`, `previous-x`, `previous-y` | Tracking variables supporting movement diagnostics and behavior switching. |
+
+### Predator: Agent Variables
+
+| Variable Name | Definition |
+|------------------------------------|------------------------------------|
+| `vision-distance` | Radius within which prey are considered visible to the predator. |
+| `prey-in-vision` | Agentset of visible prey within the predator’s vision radius. |
+| `hunting?` | Boolean indicator of whether the predator is actively pursuing prey. |
+| `bursting?` | Boolean indicator of whether the predator is in burst speed mode. |
+| `speed` | Predator movement speed, which can increase during bursting. |
+| `max-speed` | Maximum predator speed used during chase. |
+| `stomach-contents` | Current stomach contents used to limit feeding and trigger foraging and lipid use when empty. |
+| `stomach-capacity` | Maximum stomach capacity. |
+| `gape-size` | Predator gape size used as a constraint on edible prey. |
+| `daytime-prey-eaten` | Daily counter of prey eaten. |
+| `total-prey-eaten` | Cumulative prey eaten (tracked via counters). |
+| `prey-eaten-in-patch` | Patch level counter incremented during predation. |
+| `E-swim` | Swimming energy cost computed during movement. |
+| `difficulty-factor` | Hydrodynamic movement difficulty used to scale energetic cost of movement. |
+| `swim-efficiency` | Efficiency factor used to scale energetic cost of movement. |
+
+## Process Overview and Scheduling
+
+**Prey Behavior (per agent)**
+
+1.  During `swim`, if `fleeing?` is false, prey execute normal migration
+    movement and pay swimming energetic costs.
+
+2.  If `fleeing?` is true, prey execute `flee-stripedbass`, which
+    overrides normal migration movement and moves prey through a short
+    random evasive path over water patches.
+
+3.  Prey stop fleeing when no striped bass are detected within the
+    configured encounter range or when prey energy is depleted.
+
+**Predator Behavior (per agent)**
+
+1.  During active movement periods, predators define
+    $\mathcal{P}_{vision}$ as prey within $A_{vision}$.
+
+2.  If stomach contents are empty, predators enter foraging mode and may
+    activate lipid loss depending on the broader energy logic.
+
+3.  If any prey are in vision, predators set `hunting?` to true, chase
+    prey, and attempt capture.
+
+4.  Predators adjust speed during pursuit, trigger prey fleeing
+    behaviors, and consume prey when capture criteria are met.
+
+5.  Predation updates predator stomach contents, prey counters, and
+    patch level consumption counters.
+
+## Design Concepts
+
+**Basic Principles:** Predator–prey interactions are adapted from the
+[@dobon_netlogo_2018] NetLogo schooling and predation framework. The
+core structure of local visual detection, directional pursuit, prey
+fleeing, and stochastic capture is retained from that implementation. In
+P-MEM, these interaction rules are extended by coupling chase and escape
+behavior to energetic constraints, gape limitation, stomach capacity,
+and contaminant transfer. Thus, the underlying encounter mechanics
+broadly follow @dobon_netlogo_2018, while cost-routing, physiological
+scaling and contaminant dynamics represent model extensions.
+
+**Emergence:** Spatial predation patterns emerge from coupled movement
+processes, including prey migration routes, predator search behavior,
+and the temporary displacement of prey caused by fleeing responses.
+
+**Adaptation:** Prey adaptively switch from migration movement to
+fleeing movement when predators are nearby. Predators adaptively switch
+between hunting and wandering depending on prey availability and stomach
+state.
+
+**Objectives:** Predators maximize energetic intake by capturing prey
+when available while managing energetic costs of pursuit. Prey minimize
+predation risk by fleeing when threatened, balanced against energetic
+limitations.
+
+**Sensing:** Predators and prey sense one another through neighborhood
+or cone based proximity checks using $A_{vision}$. Prey fleeing is
+triggered by local predator presence.
+
+**Stochasticity:** Stochasticity arises through random turning and patch
+selection during fleeing movement and through prey selection during
+capture attempts.
+
+**Collectives:** Collective dynamics are represented indirectly through
+the simultaneous triggering of fleeing across multiple prey within the
+predator’s encounter neighborhood.
+
+**Observation:** Key outputs include prey consumption rates, prey and
+predator energetic trajectories, and time periods of predation, and the
+spatial distribution of predation events ($P_{eaten,patch}$).
+
+## Initialization
+
+| Variable | Initialized Value | Justification |
+|:----------------------:|:----------------------:|:----------------------:|
+| **energy** | 100 | Prey begin fully energized to allow immediate fleeing or normal movement |
+| **fleeing?** | false | Prey are not actively escaping at the start |
+| **prey-alarmed?** | false | Alarm cue inactive at start of simulation |
+| **daytime-prey-eaten** | 0 | daily counter of prey eaten starts at zero |
+| **time-since-full** | 0 | predator begins simulation hungry |
+| **gape-limit** | function of size | Large predators have wider gape limits |
+| **handling-effort** | calculated per encounter | Depends on prey traits and local patch conditions |
+| **reaction-time** | size-, age-, and SPM-based | Prey and predator values dynamically computed each tick |
+| **flee-ability** | based on age | Represents individual escape competence across age classes |
+| **predation-ability** | based on age | Mid-age predators have fastest and most accurate prey responses |
+| $swim_{max}$ | $1.5-3 \frac{body lengths}{sec}$ | Typical value for sustained swimming speed in small pelagic fish (refer to Videler, 1993). |
+
+## Submodels
+
+### Prey Fleeing Trigger and Directional Response
+
+Prey enter a fleeing state when a striped bass is detected within a
+cone-based encounter neighborhood and prey energy is positive:
+
+$$
+ \exists \; predator \in \mathcal{C}_{prey}(r,\theta)\;\; \land \;\; E_{agent} > 0 \;\;\Rightarrow\;\; fleeing? = \text{true}  \hspace{2cm} \text{(C.101)} 
+$$ Where:
+
+-   $\mathcal{C}_{prey}(r,\theta)$ is the prey encounter cone with
+    radius $r = A_{vision}$ (patch units) and cone angle $\theta$
+    (implemented as `in-cone A_{vision} 180`) (degrees).
+-   $E_{agent}$ is the total internal energy available to the agent
+    (patch units).
+
+Prey exit fleeing when no striped bass are detected within the encounter
+neighborhood or when energy is depleted:
+
+$$
+ \neg \exists \; predator \in \mathcal{C}_{prey}(r,\theta)\;\; \lor \;\; E_{agent} \le 0 \;\;\Rightarrow\;\; fleeing? = \text{false}  \hspace{2cm} \text{(C.102)} 
+$$
+
+Where:
+
+-   $\mathcal{C}_{prey}(r,\theta)$ is the prey encounter cone with
+    radius $r = A_{vision}$ (patch units) and cone angle $\theta$
+    (implemented as `in-cone A_{vision} 180`) (degrees).
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+
+Directional escape is implemented by assigning heading based on predator
+relative position, corresponding to the `scare-prey` control flow:
+
+$$
+ \psi_{t+1} =
+\begin{cases}
+\psi_t + 90^\circ  & \text{(scare-right)}\\
+\psi_t - 90^\circ  & \text{(scare-left)}\\
+\psi_t + 180^\circ & \text{(scare-down)}\\
+\psi_t + 0^\circ   & \text{(scare-up)}
+\end{cases}  \hspace{2cm} \text{(C.103)} 
+$$
+
+Where:
+
+-   $\mathcal{C}_{prey}(r,\theta)$ is the prey encounter cone with
+    radius $r = A_{vision}$ (patch units) and cone angle $\theta$
+    (implemented as `in-cone A_{vision} 180`) (degrees).
+-   $\psi$ is the agent heading (degrees).
+
+### Prey Fleeing Movement and Energetic Cost
+
+When fleeing, prey move at maximum speed:
+
+$$
+ A_{speed} = speed_{max}  \hspace{2cm} \text{(C.104)} 
+$$
+
+Where:
+
+-   $A_{speed}$ is the actual swimming speed used for movement (m s⁻¹).
+-   $speed_{max}$ is the maximum achievable swimming speed (m s⁻¹).
+
+Travel distance per tick is computed from current speed (with the
+model’s internal conversion):
+
+$$
+ D_{travel} = \frac{A_{speed}}{3}  \hspace{2cm} \text{(C.105)} 
+$$
+
+Where:
+
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $A_{speed}$ is the actual swimming speed used for movement (m
+    tick⁻¹).
+
+A small random turn is applied:
+
+$$
+ \psi_{t+1} = \psi_t + \varepsilon,\;\;\; \varepsilon \sim U(-15^\circ, 15^\circ)  \hspace{2cm} \text{(C.106)} 
+$$
+
+Where:
+
+-   $\psi$ is the agent heading (degrees).
+-   $\varepsilon$ is a random turning increment (degrees).
+
+A target patch is selected from reachable water patches within distance
+$D_{travel}$:
+
+$$
+ p^* \sim \text{Uniform}\left(\{p \in \mathcal{N}(d_t) : patch\text{-}terrain(p)=\text{"water"}\}\right)  \hspace{2cm} \text{(C.107)} 
+$$
+
+Where:
+
+-   $p^*$ is the selected target patch (patch location).
+-   $p$ is the patch occupied by the prey agent (patch location.
+-   $\mathcal{N}(D_{travel})$ is the set of patches within radius
+    $D_{travel}$.
+-   $patch\text{-}terrain(p)$ returns the terrain type of patch $p$.
+-   $\text{Uniform}(\cdot)$ indicates uniform random selection.
+
+Prey traverse a path from the current patch $p$ to $p^*$ (implementation
+uses `build-path-to-prey`) and move along up to
+
+$$
+ n_t = \lceil D_{trave} \rceil  \hspace{2cm} \text{(C.108)} 
+$$
+
+Where:
+
+-   $n_t$ is the number of patch steps taken within the tick (patches).
+-   $\lceil \cdot \rceil$ denotes the ceiling operator.
+
+patch steps within the tick. Patch visitation and time spent are
+accumulated:
+
+$$
+ visits\text{-}by\text{-}alewife(p) \leftarrow visits\text{-}by\text{-}alewife(p) + 1  \hspace{2cm} \text{(C.109)} 
+$$
+
+$$
+ ticks\text{-}spent\text{-}alewife(p) \leftarrow ticks\text{-}spent\text{-}alewife(p) + 1  \hspace{2cm} \text{(C.110)} 
+$$
+
+Where:
+
+-   $p$ is the patch occupied by the prey agent (patch location).
+-   $visits\text{-}by\text{-}alewife(p)$ records cumulative visitation
+    (visits).
+-   $ticks\text{-}spent\text{-}alewife(p)$ records cumulative residence
+    time (ticks).
+
+Swimming energetic cost is applied through the shared swimming energy
+routine. First compute an energy multiplier from hydrodynamic difficulty
+and swimming efficiency:
+
+$$
+ M_{swim} = D_f \cdot \left(\frac{1}{swim_{Eff}}\right)  \hspace{2cm} \text{(C.111)} 
+$$
+
+Where:
+
+-   $D_f$ is mapped swimming difficulty index (dimensionless).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (%).
+-   $M_{swim}$ is the swimming energy multiplier (dimensionless).
+
+Then compute swimming energy cost (exponential scaling):
+
+$$
+ E_{swim} = swim_{base} \cdot m_{swim}^{\beta}  \hspace{2cm} \text{(C.112)} 
+$$
+
+Where:
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) patch⁻¹).
+-   $M_{swim}$ is the swimming energy multiplier (dimensionless).
+-   $\beta$ is the exponent controlling swimming cost scaling
+    (dimensionless.
+
+with $\beta = 0.75$. Energy is updated and constrained to remain
+non-negative:
+
+$$
+ energy_{t+1} = \max(0,\; energy_t - E_{swim,t})  \hspace{2cm} \text{(C.113)} 
+$$
+
+Where:
+
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (%).
+-   $M_{swim}$ is the swimming energy multiplier (dimensionless).
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) patch⁻¹).
+-   $\beta$ is the exponent controlling swimming cost scaling
+    (dimensionless).
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+
+### Predator Prey Detection and Chase
+
+Predators define visible prey as prey within a radius equal to
+$A_{vision}$:
+
+$$
+ \mathcal{P}_{vision} = \{i \in \text{prey} : \|x_i - x_{pred}\| \le A_{vision} \;\land\; patchtype(i) \ne \text{"sea"}\}  \hspace{2cm} \text{(C.114)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{vision}$ is the set of prey visible to the predator.
+-   $i$ indexes individual prey agents.
+-   $x_i$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predato (patch
+    coordinates)r.
+-   $\|\cdot\|$ denotes Euclidean distance (patch units).
+-   $A_{vision}$ is the predator's visual detection radius (patch
+    units).
+-   $patchtype(i)$ returns the terrain type occupied by prey $i$.
+
+Predators enter hunting mode when any prey are visible:
+
+$$
+ |\mathcal{P}_{vision}| > 0 \Rightarrow hunting? = \text{true}  \hspace{2cm} \text{(C.115)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{vision}$ is the set of prey visible to the predator.
+-   $hunting?$ is the indicator that predator is hunting.
+
+If hunting, the predator targets the nearest visible prey:
+
+$$
+ i^* = \arg\min_{i \in \mathcal{P}_{vision}} \; \|x_i - x_{pred}\|  \hspace{2cm} \text{(C.116)} 
+$$
+
+Where:
+
+-   $i^*$ is the selected target prey.
+-   $\arg\min$ returns the prey minimizing distance to the predator
+    (patch units).
+-   $x_i$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+
+Predator movement toward prey is computed using a step length limited by
+travel distance per tick and prey distance:
+
+$$
+ D_{travel} = \frac{A_{speed}}{3}  \hspace{2cm} \text{(C.117)} 
+$$ Where:
+
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $A_{speed}$ is the actual swimming speed used for movement (m
+    tick⁻¹).
+
+$$
+ step_t = \min(D_{travel},\; \|x_{i^*} - x_{pred}\|)  \hspace{2cm} \text{(C.118)} 
+$$
+
+Where:
+
+-   $step_{t}$ is the realized movement distance toward the selected
+    target during the current tick.
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $x_i$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+
+$$
+ x_{pred+1} = x_{pred} + step_t \cdot \hat{u}(x_{i^*} - x_{pred})  \hspace{2cm} \text{(C.119)} 
+$$
+
+Where:
+
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+-   $step_{t}$ is the realized movement distance toward the selected
+    target during the current tick (patch units).
+-   $\hat{u}$ is the unit direction vector toward the target prey
+    (dimensionless).
+-   $x_{i^*}$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+
+Swimming energetic cost during chase is applied using the same shared
+routine:
+
+$$
+ E_{swim,t} = swim_{base} \cdot \left(D_f \cdot \frac{1}{swim_{Eff}}\right)^{\beta}  \hspace{2cm} \text{(C.120)} 
+$$
+
+Where
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (%).
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) patch⁻¹).
+-   $\beta$ is the exponent controlling swimming cost scaling
+    (dimensionless).
+
+$$
+ E_{agent+1} = \max(0,\; E_{agent} - E_{swim,t})  \hspace{2cm} \text{(C.121)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{vision}$ is the set of visible prey.
+-   $x_i*$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $\hat{u}$ is the unit direction vector toward prey (patch
+    coordinates).
+-   $step_{t}$ is the realized movement distance toward the selected
+    target during the current tick (patch units).
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+
+### Predator Burst Speed Adjustment
+
+Predators define visible prey as prey within a radius equal to
+$A_{vision}$:
+
+$$
+ \mathcal{P}_{vision} = \{i \in \text{prey} : \|x_{i^*} - x_{pred}\| \le A_{vision} \;\land\; patchtype(i) \ne \text{"sea"}\}  \hspace{2cm} \text{(C.122)} 
+$$
+
+Where:
+
+-   $A_{vision}$ is the visual detection radius of agent (patch units).
+-   $\mathcal{P}_{vision}$ is the set of visible prey.
+-   $x_{i^*}$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+-   $patchtype$ is the location classifier of the patch.
+
+Predators enter hunting mode when any prey are visible:
+
+$$
+ |\mathcal{P}_{vision}| > 0 \Rightarrow hunting? = \text{true}  \hspace{2cm} \text{(C.123)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{vision}$ is the set of visible prey.
+-   $hunting?$ is the indicator that predator is hunting.
+
+If hunting, the predator targets the nearest visible prey:
+
+$$
+ i^* = \arg\min_{i \in \mathcal{P}_{vision}} \; \|x_{i^*} - x_{pred}\|  \hspace{2cm} \text{(C.124)} 
+$$
+
+Where:
+
+-   $i^*$ is the selected target prey.
+-   $\mathcal{P}_{vision}$ is the set of visible prey.
+-   $x_{i^*}$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+
+Predator movement toward prey is computed using a step length limited by
+travel distance per tick and prey distance:
+
+$$
+ D_{travel} = \frac{A_{speed}}{3}  \hspace{2cm} \text{(C.125)} 
+$$
+
+Where:
+
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $A_{speed}$ is the actual swimming speed used for movement (m
+    tick⁻¹).
+
+$$
+ step_t = \min(D_{travel},\; \|x_{i^*} - x_{pred}\|)  \hspace{2cm} \text{(C.126)} 
+$$
+
+Where:
+
+-   $step_{t}$ is the realized movement distance toward the selected
+    target during the current tick.
+-   $D_{travel}$ is the distance traveled in the current tick (patch
+    units), where 1 patch = 3 m.
+-   $x_{i^*}$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+
+$$
+ x_{pred+1} = x_{pred} + step_t \cdot \hat{u}(x_{i^*} - x_{pred})  \hspace{2cm} \text{(C.127)} 
+$$
+
+Where:
+
+-   $x_{pred}$ is the spatial position vector of the predator (patch
+    coordinates).
+-   $step_{t}$ is the realized movement distance toward the selected
+    target during the current tick (patch units).
+-   $\hat{u}$ is the unit direction vector toward prey.
+-   $x_{i^*}$ is the spatial position vector of prey $i$ (patch
+    coordinates).
+
+Swimming energetic cost during chase is applied using the same shared
+routine:
+
+$$
+ E_{swim} = swim_{base} \cdot \left(D_f \cdot \frac{1}{swim_{Eff}}\right)^{\beta}  \hspace{2cm} \text{(C.128)} 
+$$
+
+Where:
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $D_f$ is the mapped swimming difficulty index (dimensionless).
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (%).
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) patch⁻¹).
+-   $\beta$ is the exponent controlling swimming cost scaling.
+
+$$
+ E_{agent+1} = \max(0,\; E_{agent} - E_{swim})  \hspace{2cm} \text{(C.129)} 
+$$
+
+Where:
+
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+-   $E_{gain}$ is the energy gained from digested biomass (energy
+    units).
+
+### Predation and Consumption
+
+Predators attempt capture only if stomach contents are below Predators can successfully capture only if stomach contents are below
+capacity:
+
+$$
+ M_{stomach} < stomach_{max}  \hspace{2cm} \text{(C.130)} 
+$$
+
+Where:
+
+-   $M_{stomach}$ is the biomass currently stored in the stomach (g).
+-   $stomach_{max}$ is the maximum stomach capacity (g).
+
+Candidate prey include prey on the same patch and neighboring patches
+(local capture neighborhood):
+
+$$
+ \mathcal{P}_{near} = \{i \in \text{prey} : i \in \{here\} \cup \{neighbors\}\}  \hspace{2cm} \text{(C.131)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{near}$ is a set of prey individuals located on the
+    predator’s current patch.
+-   $i$ is the index representing an individual prey agent.
+
+Edible prey satisfy the gape constraint:
+
+$$
+ \mathcal{P}_{edible} = \{i \in \mathcal{P}_{near} : body\text{-}depth_i \le gape\text{-}size_{pred}\}  \hspace{2cm} \text{(C.132)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{edible}$ is a subset of nearby prey that satisfy the
+    predator’s gape limitation and are physically consumable.
+-   $\mathcal{P}_{near}$ is a set of prey individuals located on the
+    predator’s current patch.
+-   $body\text{-}depth_i$ is the body depth of the selected prey
+    individual (mm).
+-   $gape\text{-}size_{pred}$ is the maximum ingestible prey depth for
+    predator (mm).
+-   $i$ is the index representing an individual prey agent.
+
+If any edible prey exist, one prey is selected:
+
+$$
+ i^* \sim \text{Uniform}(\mathcal{P}_{edible})  \hspace{2cm} \text{(C.133)} 
+$$
+
+Where:
+
+-   $i^*$ is the selected target prey.
+-   $\mathcal{P}_{edible}$ is a subset of nearby prey that satisfy the
+    predator’s gape limitation and are physically consumable.
+
+Digestible meal mass is assumed to be 75% of prey wet weight:
+
+$$
+ M_{meal} = 0.75 \cdot A_{mass,i^*}  \hspace{2cm} \text{(C.134)} 
+$$
+
+Where:
+
+-   $M_{meal}$ is the digestible biomass of captured prey (g).
+-   $A_{mass,i^*}$ is the agent body mass of the selected target prey
+    (g).
+
+Available stomach space is:
+
+$$
+ S_{stomach} = stomach_{max} - M_{stomach}  \hspace{2cm} \text{(C.135)} 
+$$
+
+Where:
+
+-   $S_{stomach}$ is the available stomach capacity (g).
+-   $stomach_{max}$ is the maximum stomach capacity (g).
+-   $M_{stomach}$ is the biomass currently stored in the stomach (g).
+
+Intake is limited by available space:
+
+$$
+ M_{intake} = \min(M_{meal},\; S_{stomach})  \hspace{2cm} \text{(C.136)} 
+$$
+
+Where:
+
+-   $M_{intake}$ is the biomass actually ingested by the agent (g).
+-   $M_{meal}$ is the digestible biomass of captured prey (g).
+-   $S_{stomach}$ is the available stomach capacity (g).
+
+Stomach contents are updated:
+
+$$
+ M_{stomach+1} = M_{stomach} + M_{intake}  \hspace{2cm} \text{(C.137)} 
+$$
+
+Where:
+
+-   $S_{stomach}$ is the available stomach capacity (g).
+-   $M_{intake}$ is the biomass actually ingested by the agent (g).
+
+Prey-derived contaminant loads are added to stomach contaminant pools:
+
+$$
+ stomach\text{-}contents\text{-}MeHg_{t+1} = stomach\text{-}contents\text{-}MeHg_t + MeHg_{i^*}  \hspace{2cm} \text{(C.138)} 
+$$
+
+Where:
+
+-   $S_{stomach}$ is the available stomach capacity (g).
+-   $MeHg_{i^*}$ methylmercury content of target prey (ng).
+
+Consumption counters are incremented:
+
+$$
+ \mathcal{P}_{eaten+1} = \mathcal{P}_{eaten} + 1  \hspace{2cm} \text{(C.139)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{eaten}$ is the total prey consumed by a predator.
+
+$$
+ \mathcal{P}_{eaten, patch+1} = \mathcal{P}_{eaten, patch} + 1  \hspace{2cm} \text{(C.140)} 
+$$
+
+Where:
+
+-   $\mathcal{P}_{eaten, patch}$ is the amount of prey consumed on a
+    given patch.
+
+Selected prey is removed from the simulation:
+
+$$
+ alive(i^*) \leftarrow 0  \hspace{2cm} \text{(C.141)} 
+$$
+
+Where:
+
+-   $alive(i^*)$ is the Boolean indicating whether selected prey is
+    alive (0,1).
+
+### Interaction With Migration Movement and Swimming Energy
+
+Movement and swimming energetic cost are handled within the shared
+movement controller `swim`. If prey are not fleeing, migration movement
+is executed through STST procedures and swimming energy is charged. If
+prey are fleeing, fleeing movement is executed and swimming energy is
+charged. Therefore, no additional movement energy term is added within
+predation or fleeing procedures:
+
+$$
+ E_{move} = E_{swim} \quad \text{applied once per tick via } calculate\text{-}swim\text{-}energy  \hspace{2cm} \text{(C.142)} 
+$$
+
+Where:
+
+-   $E_{move}$ is the energy cost to move toward prey (energy units).
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).

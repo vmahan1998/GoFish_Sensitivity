@@ -1,0 +1,64 @@
+# Introduction
+```{r, include=FALSE}
+current_chapter <- "01-intro.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+```{=html}
+<div style="text-align:left;">
+  <img src="images/Complex_Problem_Figure.png"
+alt="Migratory Fish Dynamics in a Contaminated Estuary"
+       style="width:600px; border-radius:12px;
+              box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+</div>
+```
+
+Anadromous fish species such as river herring, striped bass, salmon, and sturgeon navigate coastal and estuarine systems that are increasingly affected by human activity, climate change, and legacy contaminants. Modeling their movement and behavior at fine spatial and temporal scales requires tools that can integrate physiological stressors, environmental variability, and behavior-based decision-making.
+
+Agent-based models are among the most powerful tools available for ecological forecasting and fisheries management, but they are also among the most complex. Their structure and computational demands can make them difficult to apply in practical management settings. Many biologists and ecologists who hold deep, species-specific expertise often have limited training in advanced programming or systems modeling.
+
+As a result, traditional approaches to simulating anadromous fish frequently oversimplify or exclude key biological functions and environmental interactions such as salinity exposure and contaminant exposure. Existing models also lack standardized representations of these behaviors and interactions, limiting the applicability of results and reducing their usefulness for applied management. This function library was developed to address these limitations by offering modular, empirically grounded components designed for use in modeling migratory fish. Each function is clearly documented and can be applied independently, allowing for transparent testing, modification, and reuse across a wide range of ecological scenarios and sites.
+
+## Structure
+
+Each chapter in this library corresponds to a major behavior, physiological function, or foundational component relevant to migratory fish, beginning with:
+
+-   **Co-Development of Agent-Based Models**
+
+-   **Calculate Metabolism**
+
+-   **Salinity Exposure**
+
+-   **Temperature Exposure**
+
+-   **Contaminant Exposure**
+
+-   **Digestion**
+
+-   **Filter Feeding**
+
+-   **Lipid Catabolism**
+
+-   **Landward Movement**
+
+-   **Seaward Movement**
+
+-   **Schooling**
+
+-   **Selective Tidal Stream Transport**
+
+-   **Predator-prey interactions**
+
+The final chapters provide guidance on how to integrate multiple functions into a complete agent-based model, demonstrating how these components work together to simulate fish behavior in dynamic coastal and estuarine systems.
+
+Within each chapter, each function or behavior is documented using the ODD protocol [@grimm_pattern-oriented_2005; @grimm_odd_2010; @grimm_odd_2020]. The ODD (Overview, Design concepts, Details) protocol is a standardized framework for describing agent-based models. It promotes transparency in model development and ensures consistency across implementations, especially when integrating multiple behavioral or ecological functions.
+
+-   **Overview** provides the purpose of the model component, identifies the entities involved (e.g., fish agents, environmental patches), and outlines the general processes.
+
+-   **Design** concepts describe the key theoretical underpinnings such as emergence, adaptation, objectives, sensing, stochasticity, and interaction.
+
+-   **Details** specify initialization steps, input data requirements, and the rules or submodels that govern behavior.
+
+By following the ODD protocol, this library ensures that each function is self-contained, interpretable, and ready for adaptation to a wide range of species, sites, or management scenarios.
+

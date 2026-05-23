@@ -1,0 +1,642 @@
+# Salinity Exposure
+```{r, include=FALSE}
+current_chapter <- "06-Salinity_Exposure.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+Osmoregulation allows migratory fish to maintain homeostasis by regulating internal ion concentrations in response to varying environmental salinities. Within the model, it is represented as a dynamic, state-dependent physiological process that links spatiotemporally explicit salinity exposure to ion-regulatory stress, chloride cell expression, and the metabolic energy costs of acclimation. Rather than assuming instantaneous equilibrium with surrounding salinity, agents experience osmotic stress based on local conditions and respond through time-dependent physiological adjustment [@evans_osmotic_2008].
+
+## Purpose
+
+To simulate stress response to salinity changes for migratory fish in coastal systems by regulating chloride cell density and allocating energy toward ion-regulatory processes.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+-   **Spatial Unit**: Patch (3 m x 3 m resolution)
+-   **Temporal Unit**: 5-minute time steps (`tick`)
+
+### Global Variables
+
+| Global Variable | Definition |
+|-----------------|------------|
+| **none required** | Salinity exposure uses internal agent state |
+
+### Patch Variables
+
++--------------------------+----------------------------------------------------------------------------------+
+| Variable Name            | Definition                                                                       |
++==========================+==================================================================================+
+| **Salinity** $S_{patch}$ | The salt concentration of a given patch, derived from hydrodynamic model inputs. |
++--------------------------+----------------------------------------------------------------------------------+
+
+### Agent Variables
+
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| Variable Name                                      | Definition                                                                                      |
++====================================================+=================================================================================================+
+| **acclimated-salinity** $S_{agent}$                | The salinity level the agent is currently acclimated to.                                        |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **ionregulatory-stress** $I_{stress}$              | The level of stress an agent experiences when regulating ion balance due to osmotic difference. |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **chloride-density-min** $C_{min}$                 | Minimum level of chloride cells, present even in low-stress conditions.                         |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **chloride-density-max** $C_{max}$                 | Maximum level of chloride cells at high stress.                                                 |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **chloride-cell-density** $C$                      | The current number of chloride cells expressed by the agent.                                    |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **chloride-max-proliferation** $R_{proliferation}$ | The max number of chloride cells that can be expressed per time step.                           |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **chloride-cells-this-tick** $C_{tick}$            | The number of chloride cells created (or destroyed) in the current time step.                   |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **acclimation-rate** $\alpha$                      | The rate at which chloride cell density increases over time.                                    |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **C-mid** $C_{mid}$                                | The chloride cell density at which stress buffering is 50% effective.                           |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **time-since-last-osmoregulation** $t_{osmo}$      | The time elapsed since the last chloride cell regulation event.                                 |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **Energy** $E_{agent}$                             | The agent’s total available energy for physiological functions.                                 |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **E-osmo** $E_{osmo}$                              | Total energy used for ion regulation (osmoregulation).                                          |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **E-base** $E_{base}$                              | The base energy cost per chloride cell.                                                         |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **E-creation** $E_{creation}$                      | The energy cost for producing new chloride cells.                                               |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+| **metabolic-max** $Met_{max}$                      | Maximum metabolic cost for chloride cell creation.                                              |
++----------------------------------------------------+-------------------------------------------------------------------------------------------------+
+
+## Process Overview and Scheduling
+
+1.  Compute osmotic stress based on the difference between $S_{patch}$
+    and $S_{agent}$, scaled from 1 to 10, where 1 represents the minimum
+    salinity difference and 10 represents the maximum salinity
+    difference observed across the simulation period.
+
+2.  Adjust chloride cell density depending on time since last
+    osmoregulation (%).
+
+3.  Compute energy cost of osmoregulation (energy units).
+
+4.  Deduct energy expenditure from agent's energy pool (energy units).
+
+## Design Concepts
+
+**Basic Principles:** The model is based on principles of physiological
+ecology and osmoregulatory energetics in teleost species
+[@evans_osmotic_2008]. It draws from empirical findings on ion
+transport, chloride cell (ionocyte) proliferation, and the energetic
+costs of osmoregulation (e.g., @allen_mechanisms_2009;
+@little_metabolic_2023). This process is represented in the model as a
+delayed, rate-limited acclimation response, governed by osmotic stress,
+energy availability, and an acclimation interval ($t_{osmo}$), rather
+than being parameterized to a fixed empirical time-to-response.
+
+**Emergence:** Ion-regulatory stress, chloride cell expression, and
+energy expenditure emerge from an agent's interaction with temporally
+and spatially variable salinity environments. These patterns are not
+pre-specified but arise dynamically through stress-driven,
+time-dependent physiological adjustment governed by acclimation dynamics
+and energy constraints.
+
+**Adaptation**: Agents respond to osmotic stress by adjusting chloride
+cell density toward a stress-dependent target. The rate of adjustment is
+proportional to the difference between current and target chloride
+density and is constrained by a proliferation rate parameter, energy
+availability, and an acclimation interval ($t_{osmo}$), which limits how
+frequently updates occur. This process allows individuals to reduce
+internal-external salinity gradients and maintain ion homeostasis over
+time.
+
+**Objectives:** Agents seek to support survival by reducing stress and
+avoiding excessive energy loss through regulating chloride cell
+expression.
+
+**Sensing**: Agents sense local salinity ($S_{patch}$) and compare it
+with their acclimated salinity ($S_{agent}$). They also track their own
+energy state and time since last osmoregulation.
+
+**Stochasticity**: Acclimation may vary with $\alpha$, the acclimation
+rate parameter controlling how quickly an agent adjusts physiologically
+to salinity changes, which is assigned from a defined range for each
+individual to represent variability in osmoregulatory capacity across
+the population.
+
+**Observation:** Outputs include $S_{stress}$ (dimensionless, scaled
+1–10), $C_{current}$ (dimensionless, relative chloride cell density
+rather than absolute cell count), $E_{osmo}$ ((energy units) tick⁻¹),
+and $E_{agent}$ (energy units). Energy is represented in relative energy
+units rather than absolute units (e.g., calories), allowing consistent
+scaling across processes without requiring direct empirical calibration.
+Chloride cell density is initialized at $C_{min}$ and evolves
+dynamically toward a stress-dependent target over time.
+
+## Initialization
+
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| Variable     | Initialized Value           | Justification                                                                                    |
++:============:+:===========================:+:================================================================================================:+
+| $S_{patch}$  | user-defined for data input | This input can be user-defined realistic data values or known spatial data.                      |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $S_{agent}$  | 35 (psu)                    | Assumes agents start acclimated to marine environment.                                           |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $I_{stress}$ | 1                           | Acclimated agents have minimal stress levels.                                                    |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $C$          | 50%                         | Starts with partial cell density, allowing for regulation depending on environmental conditions. |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $C_{min}$    | 10%                         | A baseline level of chloride cells is necessary for basic osmoregulatory functions.              |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $C_{max}$    | 100%                        | Agents can't express more than 100% of cells.                                                    |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $\alpha$     | 0.0017 - 0.002              | Osmolarity stabilization from Figure 3. in (Allen et al., 2009).                                 |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $C_{mid}$    | 50%                         | When cells are 50% density, stress buffering is 50% effective (Allen et al., 2009).              |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $E_{agent}$  | 100%                        | Agent starts with limited energy before migration.                                               |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $E_{base}$   | Teleost (4%)                | Based on the **branchial cost** (Little et al., 2023; Kirschner, 1993).                          |
+|              |                             |                                                                                                  |
+|              | Aptoerygian ()              |                                                                                                  |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $Met_{max}$  | Teleost (3.5%)              | Based on the intestinal and renal cost & size of agent (Little et al., 2023; Kirschner, 1993).   |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+| $k$          | -0.75                       | Scaling component for body mass is negative (Kirschner, 1993) and follows Kleiber’s Law.         |
++--------------+-----------------------------+--------------------------------------------------------------------------------------------------+
+
+## Submodels
+
+### Salinity Stress
+
+Salinity stress ($S_{stress}$) is calculated based on the difference
+between an agent’s acclimated salinity and the ambient patch salinity,
+adjusted by the chloride cell buffering effect. This formulation
+represents a relative index of osmotic stress derived from salinity
+mismatch and buffering capacity, rather than a direct physiological
+measure (e.g., cortisol concentration):
+
+$$
+ S_{stress} = \frac{\log_{10}(1 + |S_{agent} - S_{patch}|) \cdot 10}{1 + e^{-2 \cdot (C_{current} / C_{mid})}}   \hspace{2cm} \text{(C.19)} 
+$$
+
+Where:
+
+-   $S_{stress}$ is the agent's physiological salinity stress index
+    (dimensionless, scaled 1–10).
+
+-   $S_{agent}$ is an agent's acclimated salinity (psu).
+
+-   $S_{patch}$ is the environmental salinity at patch (psu).
+
+-   $C_{current}$ is the current chloride cell density (%, relative
+    density).
+
+-   $C_{mid}$ is the chloride density at 50% buffering effectiveness (%,
+    relative density).
+
+Stress is capped within the range [1, 10], and may be reduced slightly
+over time if salinity remains stable and chloride density is sufficient:
+
+$$
+ S_{stress} = S_{stress} \cdot 0.98 \quad \text{if conditions are stable and } C > C_{min}   \hspace{2cm} \text{(C.20)} 
+$$
+
+Where:
+
+-   $S_{stress}$ is the agent's physiological salinity stress index
+    (dimensionless, scaled 1–10).
+
+Agents also slowly shift their acclimated salinity toward ambient
+salinity when conditions have been stable for several time steps (e.g.,
+hours to days), consistent with documented time-dependent salinity
+acclimation in fishes [@evans_osmotic_2008].
+
+$$
+ S_{agent} = S_{agent} + (S_{patch} - S_{agent}) \cdot 0.02   \hspace{2cm} \text{(C.21)} 
+$$
+
+Where:
+
+-   $S_{agent}$ is the agent’s acclimated salinity (psu).
+-   $S_{patch}$ is the environmental salinity at patch (psu).
+
+### Chloride Cell Density
+
+Chloride cell proliferation is driven by the level of ion-regulatory
+stress the agent experiences when encountering a difference in salinity
+[@evans_osmotic_2008]. In teleost fishes, ion transport capacity and
+chloride cell function are regulated through changes in transporter
+activity and cell abundance in response to environmental salinity and
+endocrine signaling, rather than instantaneous adjustment. Accordingly,
+the greater the stress, the higher the target chloride density the agent
+attempts to reach, up to a maximum threshold. Chloride cell density is
+represented as a relative value expressed as a percentage of maximum
+capacity, where 10% corresponds to the minimum density (stress level 1)
+and 100% corresponds to the maximum density (stress level 10). Agents
+adjust their chloride cell density gradually over time based on their
+current ion-regulatory stress and acclimation status, with the rate of
+adjustment constrained by proliferation dynamics, energy availability,
+and the acclimation interval ($t_{osmo}$). Chloride cells are not
+adjusted unless the agent’s energy exceeds 25%.
+
+The chloride cell density is based on stress:
+
+$$
+ C_{target} = C_{min} + (C_{max} - C_{min}) \cdot \left(\frac{S_{stress}}{10}\right)   \hspace{2cm} \text{(C.22)} 
+$$
+
+Where:
+
+-   $C_{target}$ is the target chloride density based on stress (%,
+    relative density).
+-   $C_{min}$ is the minimum chloride cell density (%, relative
+    density).
+-   $C_{max}$ is the maximum chloride cell density (%, relative
+    density).
+-   $S_{stress}$ is the agent's physiological salinity stress index
+    (dimensionless, scaled 1–10).
+
+If salinity conditions have remained stable for an extended period
+(e.g., 288 ticks), ($C_{target}$) is slightly reduced to reflect partial
+down regulation of chloride cells due to long-term acclimation:
+
+$$
+ C_{target} = C_{target} \cdot 0.99 \quad \text{if stable}   \hspace{2cm} \text{(C.23)} 
+$$
+
+Where:
+
+-   $C_{target}$ is the target chloride density based on stress (%,
+    relative density).
+
+Chloride cell density then approaches the target using a double-rate
+adjustment and capped maximum rate of change:
+
+$$
+ \Delta C = \left(C_{target} - C_{current}\right) \cdot \left(2 \cdot R_{proliferation}\right)   \hspace{2cm} \text{(C.24)} 
+$$
+
+Where:
+
+-   $\Delta C$ is the updated chloride density after regulation (%,
+    relative density).
+-   $C_{target}$ is the target chloride density based on stress (%,
+    relative density).
+-   $C_{current}$ is the current chloride cell density (%, relative
+    density).
+-   $R_{proliferation}$ is the chloride cell proliferation rate ((%)
+    tick⁻¹, relative density per tick).
+
+$$
+ \Delta C = \max\left(-R_{max}, \min(R_{max}, \Delta C)\right)  \hspace{2cm} \text{(C.25)} 
+$$
+
+Where:
+
+-   $\Delta C$ is the updated chloride density after regulation (%,
+    relative density).
+-   $R_{max}$ is the maximum allowable chloride change per update ((%)
+    tick⁻¹, relative density per tick).
+
+If the agent has low energy ($\leq 50\%$), the adjustment rate is
+halved:
+
+$$
+ \Delta C = \Delta C \cdot 0.5 \quad \text{if energy is low}  \hspace{2cm} \text{(C.26)} 
+$$
+
+Where:
+
+-   $\Delta C$ is the updated chloride density after regulation (%,
+    relative density).
+
+Finally, the chloride cell density is updated and constrained between
+$C_{min}$ and $C_{max}$:
+
+$$
+ C_{new} = \max(C_{min}, \min(C_{max}, C_{current} + \Delta C))  \hspace{2cm} \text{(C.27)} 
+$$
+
+Where:
+
+-   $C_{new}$ is the updated chloride density after regulation (%,
+    relative density).
+-   $C_{min}$ is the minimum chloride cell density (%, relative
+    density).
+-   $C_{current}$ is the current chloride cell density (%, relative
+    density).
+-   $C_{max}$ is the maximum chloride cell density (%, relative
+    density).
+-   $\Delta C$ is the updated chloride density after regulation (%,
+    relative density).
+
+This ensures that the agent does not overshoot the physiologically
+realistic limit of chloride cell density, while still responding to
+salinity stress.
+
+Chloride density is only recalculated after a given acclimation
+interval:
+
+$$
+ t_{osmo} \geq \alpha^{-1}  \hspace{2cm} \text{(C.28)} 
+$$
+
+Where:
+
+-   $t_{osmo}$ is the time since last osmoregulation update (ticks).
+-   $\alpha$ is the acclimation rate constant (dimensionless/tick).
+
+After updating, the acclimation timer is reset:
+
+$$
+ t_{osmo} = 0  \hspace{2cm} \text{(C.29)} 
+$$
+
+Where:
+
+-   $t_{osmo}$ is the time since last osmoregulation update (ticks).
+
+This prevents agents from recalculating chloride density every time step
+and allows for controlled, realistic responses to prolonged stress and
+salinity changes.
+
+### Osmoregulation Energy {.unnumbered}
+
+This formulation follows established allometric scaling relationships in
+ecological physiology, where metabolic and physiological processes scale
+with body mass (g) according to a power-law relationship (e.g.,
+@kleiber_body_1932; @west_general_1997; @brown_toward_2004;
+@schmidt_nielsen_animal_1997).
+
+Metabolic cost related to mass (g):
+
+$$
+ E_{creation} = Met_{max} * (\frac{A_{mass}}{M_{max}})^k  \hspace{2cm} \text{(C.30)} 
+$$
+
+Where:
+
+-   $E_{creation}$ is the energy cost of chloride cell creation scaled
+    by body size ((energy units) tick⁻¹).
+
+-   $Met_{max}$ is the maximum metabolic cost parameter for
+    osmoregulation ((energy units) tick⁻¹).
+
+-   $A_{mass}$ is the agent's body mass used for allometric and
+    energetic scaling (g).
+
+-   $M_{max}$ is the maximum body mass across the population (g).
+
+-   $k$ is the energy scaling exponent (dimensionless).
+
+Energy required for ion regulation:
+
+$$
+ E_{osmo} = (E_{base} \cdot C) + (E_{creation} \cdot C_{tick})  \hspace{2cm} \text{(C.31)} 
+$$
+
+Where:
+
+-   $E_{base}$ is the baseline cell maintenance energy cost per tick
+    ((energy units) tick⁻¹).
+
+-   $C_{current}$ is the current chloride cell density (%, relative
+    density).
+
+-   $E_{creation}$ is the energy cost of chloride cell creation scaled
+    by body size ((energy units) tick⁻¹).
+
+-   $C_{tick}$ is the relative percent of new chloride cells produced in
+    a tick (%, relative density).
+    
+### Energy Balance
+
+Agents balance energy to osmoregulate with total energy allowance:
+
+$$
+ E_{agent} = E_{agent} - E_{osmo}  \hspace{2cm} \text{(C.32)} 
+$$
+
+Where:
+
+-   $E_{agent}$ is the total internal energy available to the agent
+    (energy units).
+
+-   $E_{osmo}$ is the energy cost of osmoregulation (energy units).
+
+## Netlogo Implementation
+
+```{netlogo}
+;; ================================================================
+;; SALINITY EXPOSURE AND OSMOREGULATION SUBMODEL
+;; ================================================================
+
+globals [
+  stable-time                ;; tracks duration of stable salinity
+  salinity-threshold         ;; threshold difference to count as “stable”
+]
+
+patches-own [
+  salinity                   ;; environmental salinity (psu)
+]
+
+fish-own [
+  ;; --- Salinity Physiology ---
+  acclimated-salinity
+  ionregulatory-stress       ;; 1–10 scale
+
+  ;; --- Chloride Cell Physiology ---
+  chloride-density-min
+  chloride-density-max
+  chloride-cell-density
+  chloride-max-proliferation
+  chloride-cells-this-tick
+  C-mid
+
+  ;; --- Acclimation Timing ---
+  acclimation-rate
+  time-since-last-osmoregulation
+
+  ;; --- Energetics ---
+  energy
+  E-osmo
+  E-base
+  E-creation
+  Met-max
+
+  ;; --- Size Scaling ---
+  weight
+]
+
+
+;; ================================================================
+;; MAIN OSMOREGULATION PROCEDURE
+;; ================================================================
+
+to osmoregulate
+  calculate-ionregulatory-stress
+  regulate-chloride-cell-density
+  calculate-osmoregulation-energy
+end
+
+
+;; ================================================================
+;; STEP 1 – CALCULATE ION-REGULATORY STRESS
+;; ================================================================
+
+to calculate-ionregulatory-stress
+  let prev-sal [salinity] of previous-patch
+  let patch-sal [salinity] of patch-here
+  let agent-sal acclimated-salinity
+
+  ;; --- Base salinity difference ---
+  let sal-diff abs (agent-sal - patch-sal)
+
+  ;; --- Core salinity-based stress function ---
+  let salinity-stress salinity-to-stress sal-diff chloride-cell-density ionregulatory-stress
+
+  ;; --- Salinity stability, used for acclimation ---
+  let sal-change abs (patch-sal - prev-sal)
+  
+  if sal-change < salinity-threshold [
+    set stable-time stable-time + 1
+  ]
+  if sal-change >= salinity-threshold [
+    set stable-time 0
+  ]
+
+  ;; --- Slow acclimation when salinity is stable ---
+  if stable-time > 4 and chloride-cell-density > chloride-density-min [
+    set salinity-stress salinity-stress * 0.98
+    set acclimated-salinity acclimated-salinity +
+      ((patch-sal - acclimated-salinity) * 0.02)
+  ]
+
+  ;; --- Chloride buffering ---
+  let buffer-reduct calculate-stress-reduction-chloride-function chloride-cell-density
+
+  ;; Buffering only applies above minimum chloride levels
+  if chloride-cell-density > chloride-density-min [
+    set ionregulatory-stress max (list 1 (salinity-stress - buffer-reduct * 0.8))
+  ]
+
+  if chloride-cell-density <= chloride-density-min [
+    set ionregulatory-stress salinity-stress
+  ]
+end
+
+
+;; ================================================================
+;; STEP 2 – REGULATE CHLORIDE CELL DENSITY
+;; ================================================================
+
+to regulate-chloride-cell-density
+  ;; energetic constraint
+  if energy <= 25 [ stop ]
+
+  set time-since-last-osmoregulation time-since-last-osmoregulation + 1
+
+  ;; wait until acclimation interval
+  if time-since-last-osmoregulation < acclimation-rate [ stop ]
+
+  ;; --- Target chloride cell density ---
+  let target-dens chloride-density-min +
+    ((chloride-density-max - chloride-density-min) *
+     (ionregulatory-stress / 10))
+
+  ;; down-regulate if long-term stability
+  if stable-time > 288 [
+    set target-dens (target-dens * 0.99)
+  ]
+
+  ;; constrain target to bounds
+  set target-dens max (list chloride-density-min
+                       min (list chloride-density-max target-dens))
+
+  ;; --- Adjustment rate ---
+  let change (target-dens - chloride-cell-density) *
+             (2 * chloride-max-proliferation)
+
+  let max-change ((chloride-density-max - chloride-density-min) *
+                   chloride-max-proliferation)
+
+  ;; clamp change
+  set change max (list (-1 * max-change) (min (list max-change change)))
+
+  ;; energy-dependent reduction
+  if energy <= 50 [
+    set change (change * 0.5)
+  ]
+
+  ;; apply change
+  set chloride-cell-density chloride-cell-density + change
+  set chloride-cell-density max (list chloride-density-min
+                                  min (list chloride-density-max chloride-cell-density))
+
+  set chloride-cells-this-tick abs change
+  set time-since-last-osmoregulation 0
+end
+
+
+;; ================================================================
+;; STEP 3 – OSMOREGULATION ENERGY COST
+;; ================================================================
+
+to calculate-osmoregulation-energy
+  let maintenance (E-base * chloride-cell-density)
+  let creation    (E-creation * chloride-cells-this-tick)
+
+  set E-osmo (maintenance + creation)
+  set energy max (list 0 (energy - E-osmo))
+end
+
+
+;; ================================================================
+;; CHLORIDE BUFFERING FUNCTION
+;; ================================================================
+
+to-report calculate-stress-reduction-chloride-function [C]
+  ;; logistic-like buffering curve
+  let reduction 5 * (1 - exp(C * -0.5 / C-mid))
+  report reduction
+end
+
+
+;; ================================================================
+;; SALINITY → STRESS FUNCTION
+;; ================================================================
+
+to-report salinity-to-stress [diff C prev-stress]
+  let scaled (log (1 + abs diff) 10) * 10
+  let buffer   (1 + exp(-2 * (C / C-mid)))
+  let result   (scaled / buffer)
+
+  ;; constrain to 1–10
+  set result max (list 1 (min (list 10 result)))
+
+  ;; acclimation effect
+  if stable-time > 288 [
+    set result (result * 0.99)
+  ]
+
+  report result
+end
+
+
+;; ================================================================
+;; SIZE-SCALED CREATION COST
+;; ================================================================
+
+to calculate-E-creation
+  let M-max max [weight] of fish
+  if M-max <= 0 [ set M-max weight ]
+
+  let beta -0.75
+  set E-creation Met-max * ((weight / M-max) ^ beta)
+end
+
+```
+

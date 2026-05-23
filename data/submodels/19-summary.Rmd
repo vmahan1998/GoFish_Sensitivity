@@ -1,0 +1,313 @@
+# Modeling Toolkit
+```{r, include=FALSE}
+current_chapter <- "19-summary.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+This page consolidates the tools, references, practices, and repositories that support the modeling work described in this book. It is intended as a practical reference for readers building their own agent-based models using the GoFish framework or developing new implementations in NetLogo, R, or Python.
+
+---
+
+## Best Practices
+
+Building a good agent-based model is not just about getting the code to run. It is about building something that can be understood, evaluated, extended, and trusted by people other than the person who wrote it. The practices described in this section are not bureaucratic overhead. They are the difference between a model that produces a result and a model that produces a defensible, reproducible, and reusable scientific contribution. Each practice discussed below targets a specific failure mode that is common in computational ecological modeling: undocumented assumptions that cannot be verified, entangled code that cannot be debugged, outputs that cannot be traced back to a specific model version, and behavioral rules that encode the modeler's assumptions rather than the system's ecology. When addressed using the best practices of agent-based models, they form a workflow that supports model development at every stage, from the first behavioral rule to the final manuscript figure.
+
+### ODD Protocol
+
+**What it is.** The ODD (Overview, Design Concepts, Details) protocol [@grimm_standard_2006; @grimm_odd_2010; @grimm_odd_2020] is the standard documentation framework for agent-based models. It covers seven elements in a fixed order:
+
+1. Purpose and patterns
+2. Entities, state variables, and scales
+3. Process overview and scheduling
+4. Design concepts
+5. Initialization
+6. Input data
+7. Submodels
+
+**Why it exists.** Before ODD, models described in publications were routinely impossible to replicate because documentation omitted critical details about scheduling, initialization, and decision rules. ODD makes those details mandatory.
+
+**Why you should write it first, not last.** Writing ODD before you write code forces you to answer the questions that will otherwise come back to bite you mid-implementation: What is this model actually for? What patterns should it reproduce? What assumptions are baked into each submodel? What runs before what?
+
+**Why it matters for reuse.** For models intended for transfer across systems, ODD functions as a formal interface specification. A reader adapting a submodel to a different species can use the ODD to identify exactly which state variables, parameters, and environmental inputs are required, which processes must run first, and what a plausible output looks like.
+
+> **Rule of thumb:** If someone cannot reproduce your model from the ODD alone, the ODD is incomplete.
+
+---
+
+### Modular Design
+
+**The core principle.** Every behavioral process should be a bounded, independently documented unit with explicit inputs, outputs, and assumptions before it is integrated into a larger model.
+
+**What this looks like in practice.** In this book, every behavioral function lives in its own `.nls` file:
+
+```
+nls/
+├── Schooling.nls
+├── Landward-Migration.nls
+├── Selective-Tidal-Stream-Transport.nls
+├── Osmoregulation.nls
+├── Calculate-metabolism.nls
+└── ...
+```
+
+Each file is self-contained. It can be read, tested, and used without opening any other file in the library.
+
+**What goes wrong without it.** A model that embeds all behavioral logic in a single `go` procedure creates three problems that get worse as the model grows:
+
+- **Debugging:** no clean boundary between processes means a fix in one place breaks something somewhere else, and you cannot tell where to look
+- **Reuse:** copying code requires manually untangling behavioral rules from state variable bookkeeping, and you will miss a dependency
+- **Verification:** reviewers cannot confirm that the rule described in the manuscript matches what is in the code, because no unit of code corresponds to a specific biological process
+
+**What the GoFish Library adds.** GoFish is the first behavioral modeling library for migratory fish to document each submodel in its own ODD framework. Every `.nls` file carries its own purpose statement, state variable definitions, input/output specification, and design concept description. Submodels are not reusable code snippets; they are self-contained, independently documented behavioral units.
+
+**The practical payoff.** A researcher who needs only the osmoregulation submodel for a salinity stress study can take that one file, read its ODD documentation, and implement it without touching the rest of the library. The same `Schooling.nls` appears unchanged in the Chapter 15 simple model, the Chapter 16 complex model, and the Chapter 17 applied model.
+
+> **Rule of thumb:** Before writing any procedure, define its interface: what variables does it read, what does it write, and what purpose of including each variable is. If you cannot answer all three questions, you are not ready to write the code.
+
+---
+
+### Model File Structure
+
+Organizing model files consistently from the start reduces the overhead of returning to a model after a gap and makes it easier for collaborators to navigate the codebase. The example structure from the **GoFish Library** is:
+
+```
+Model_Name/
+├── Model_Name.nlogo          # Main model file (__includes, setup, go only)
+├── nls/                      # Behavioral submodel files
+│   ├── VariableNames.nls
+│   ├── Schooling.nls
+│   ├── Landward-Migration.nls
+│   └── ...
+├── inputs/                   # GIS shapefiles, hydrodynamic CSVs, cue data
+│   ├── monthly/
+│   └── ...
+├── outputs/                  # Simulation output CSVs (gitignored if large)
+├── R/                        # Post-processing scripts
+│   ├── post_processing.R
+│   └── patch_processing.R
+├── docs/                     # ODD documentation, manuscript drafts
+└── README.md                 # Setup instructions, dependency list
+```
+
+The main `.nlogo` file should contain only `__includes`, `setup`, `go`, and reporters used directly by the interface. All behavioral logic lives in the `nls/` subfolder. This separation makes it immediately clear what the model does versus how it does it.
+
+> **Rule of thumb:** If a collaborator cannot find the procedure responsible for a given behavior in under 60 seconds, your file structure needs work.
+
+---
+
+### Sensitivity Analysis and Model Evaluation
+
+**The goal.** Model evaluation should prioritize reproduction of observed system-level patterns over statistical calibration of individual parameters. This approach, known as pattern-oriented modeling [@grimm_pattern-oriented_2005], grounds model credibility in emergent behavior rather than parameter fitting.
+
+**Three levels of evaluation every ABM should target:**
+
+- **Structural validation** — do the behavioral rules produce qualitatively correct responses before any quantitative comparison? Test individual submodels in isolation against known biology before integrating them.
+- **Sensitivity analysis** — which parameters actually drive the outputs you care about? Run this before scenario comparison, not after.
+- **Pattern matching** — does the integrated model reproduce the empirical patterns it was designed to explain? Use the best available observational data at the relevant spatial and temporal scale.
+
+**How to run sensitivity analysis.**
+
+1. Use BehaviorSpace to vary one parameter at a time across its plausible range
+2. Hold all other parameters at nominal values
+3. Confirm that outputs respond in the expected direction and magnitude
+4. Parameters with high sensitivity deserve careful empirical grounding
+5. Parameters with low sensitivity can be fixed at nominal values without loss of generality
+
+> **Rule of thumb:** If you have not run a sensitivity analysis, you do not yet know what your model is actually doing.
+
+---
+
+## Co-Production and Transparency
+
+**Why it matters.** The behavioral rules embedded in an ABM encode assumptions about how organisms move, feed, and respond to stress. In applied contexts, those assumptions affect management recommendations, restoration priorities, and risk assessments. They should be legible and challengeable by the people most affected by those decisions, not just by the researchers who built the model.
+
+**What co-production means in practice.**
+
+- Involve domain experts, local knowledge holders, and end users in defining behavioral rules before implementation, not in reviewing outputs after the fact
+- Document every assumption explicitly at the submodel level so non-modelers can evaluate whether it reflects their system
+- Treat model structure as a hypothesis about how the system works, and make that hypothesis visible
+
+**What it reduces.** Black-box modeling. When assumptions are documented at the submodel level and grounded in the knowledge of people familiar with the system, the model becomes interpretable by the communities it is meant to serve. This is not just good practice for community-engaged research; it is good scientific practice for any model whose behavioral rules are not fully derivable from first principles.
+
+> **Rule of thumb:** If the people whose system you are modeling cannot read your ODD and tell you whether the behavioral rules are realistic, your documentation is not complete.
+
+---
+
+## Version Control
+
+**What it is.** Version control is a system for tracking every change made to a codebase over time. Git is the standard tool; GitHub is the standard hosting platform. Every model in this book is version-controlled.
+
+**Why it is non-negotiable for research models.** A simulation model is scientific code. Every change to a behavioral rule, parameter value, or scheduling decision is a methodological decision that affects results. Without version control, those decisions are invisible, undocumented, and irreversible. A model that cannot be traced back to a specific state at a specific point in time is not reproducible, and a model that is not reproducible is not science.
+
+**Working copy protection.** The most immediately practical benefit is also the most underappreciated. Agent-based models are complex enough that a single change to a procedure can silently break behavior in a completely unrelated part of the model. Without version control, you have no reliable way back. With version control, rolling back to the last working state takes one command. File corruption, accidental deletion, overwritten saves, and mid-refactor realizations that the new approach is wrong all become recoverable situations rather than catastrophic losses. For a model that has taken months to build, this alone justifies the overhead of learning Git.
+
+**Getting lost in your own code.** One of the most common and underreported problems in computational modeling is returning to a model after weeks or months away and having no idea what changed, why it changed, or whether the current version is the one that produced a specific result. Without version control, the working directory becomes a graveyard of files named `model_v2_final_FINAL_revised.nlogo`, changes made during a late-night debugging session are indistinguishable from intentional design decisions, and the connection between a figure in a manuscript and the code that produced it is lost. Version control replaces that chaos with a linear, annotated history of every decision made during model development.
+
+**Knowing why you made a change.** A commit message is a note to your future self and your collaborators. When a parameter was changed three months ago and the model now behaves differently, a commit message that says "increased STST cooldown from 1 to 3 ticks to reduce oscillation at high velocities" tells you exactly what was changed, why, and what problem it was solving. Without this record, debugging requires reverse-engineering your own reasoning, which is unreliable and time-consuming. Over the course of a multi-year modeling project, the commit history becomes the most detailed and accurate record of how the model evolved, more detailed than any manuscript methods section.
+
+**Auditable record for reproducibility.** Every commit records exactly what changed, when, and why. When a reviewer asks which version of the model produced a specific result, you can point to a tagged release. When a collaborator asks why a behavioral rule was implemented a certain way, the commit history has the answer. This audit trail is what makes a computational model reproducible in the same sense that a lab notebook makes a bench experiment reproducible. Without it, claims about model behavior are difficult to verify and impossible to independently confirm.
+
+**Collaboration without conflict.** Version control allows multiple people to work on the same codebase simultaneously without overwriting each other's changes. Branches let one person extend a submodel while another debugs a different procedure, and changes are merged only when both are ready. Without this, collaborative model development defaults to emailing `.nlogo` files back and forth, manually reconciling conflicting edits, and hoping no one overwrites work that has not been backed up. For models developed across research groups or with community partners, version control is what makes shared development tractable at all.
+
+**Permanent archiving and citation.** GitHub releases can be minted as permanent DOIs through Zenodo, meaning a specific model version can be cited in a manuscript like any other data product. This links the published results to the exact code that produced them, permanently and verifiably. Without this, the model that produced a published result exists only as a file on someone's laptop.
+
+**How to do it.**
+
+1. Create a repository before writing any code
+2. Commit after every meaningful change with a descriptive message explaining what changed and why
+3. Use branches for major new features or submodel additions
+4. Tag a release at every manuscript submission or scenario run
+5. Archive tagged releases to Zenodo for a citable, permanent DOI
+
+> **Rule of thumb:** If you cannot answer the question "what changed between the previous version and the version you are running now, and why that change was implemented," you needed version control before you started.
+
+---
+
+## Learning References
+
+The following texts provide the conceptual and methodological foundations for the modeling approach used in this book, listed roughly in order of how a new practitioner would encounter them.
+
+- **Railsback, S. F., & Grimm, V. (2019).** *Agent-Based and Individual-Based Modeling: A Practical Introduction* (2nd ed.). Princeton University Press. — The primary methodological reference for this book. Chapters 1–5 cover the ODD protocol, design concepts, and scheduling in detail. Chapter 11 on pattern-oriented modeling is directly relevant to how P-MEM was evaluated against Milford Dam fish lift passage data.
+
+- **Grimm, V., & Railsback, S. F. (2005).** *Individual-Based Modeling and Ecology*. Princeton University Press. — The theoretical companion, covering the ecological motivation for individual-based models and their relationship to population and community ecology.
+
+- **Grimm, V., et al. (2010).** The ODD protocol: A review and first update. *Ecological Modelling*, 221(23), 2760–2768. — The peer-reviewed specification of the ODD protocol used to document P-MEM in Appendix C of Mahan (2025).
+
+- **Grimm, V., et al. (2020).** The ODD protocol for describing agent-based and other simulation models: A second update to improve clarity, replication, and structural realism. *Journal of Artificial Societies and Social Simulation*, 23(2), 7. — The most recent ODD update; includes the TRACE documentation framework for transparent and comprehensive model evaluation.
+
+- **Wilensky, U., & Rand, W. (2015).** *An Introduction to Agent-Based Modeling*. MIT Press. — Accessible introduction to NetLogo-based ABM with worked examples across ecology, social science, and economics. Particularly useful for readers new to agent-based thinking.
+
+- **DeAngelis, D. L., & Grimm, V. (2014).** Individual-based models in ecology after four decades. *F1000Prime Reports*, 6, 39. — A review of the maturation of individual-based modeling as a scientific practice, covering validation, scaling, and the relationship between IBM predictions and empirical data.
+
+- **Smaldino, P. E. (2023).** Modeling Social Behavior: Mathematical and Agent-Based Models of Social Dynamics and Cultural Evolution. Princeton University Press. 360 pp. ISBN: 9780691224145.
+
+---
+
+## Programming Resources
+
+### NetLogo
+
+**[NetLogo](https://ccl.northwestern.edu/netlogo/)** is the primary platform used throughout this book. Developed at Northwestern University's Center for Connected Learning and Computer-Based Modeling, it is purpose-built for simulating complex systems with many interacting agents and is particularly well suited to spatially explicit ecological models with visual interfaces.
+
+**What makes NetLogo different.** NetLogo has a built-in spatial grid (patches), native agent primitives (turtles, links), and an integrated visual interface with sliders, monitors, and plots that update in real time. You can watch emergent behavior develop tick by tick and interact with the model while it is running. This makes it uniquely well suited to behavioral rule development and debugging, because the spatial and temporal dynamics of the model are directly observable without any additional visualization code.
+
+**Key resources.**
+
+- **[NetLogo Models Library](https://ccl.northwestern.edu/netlogo/models/)** — Hundreds of models organized by discipline. The Flocking model provides the BOIDS separation-cohesion-alignment logic that `Schooling.nls` adapts directly. The Ants model illustrates diffusion-based cost fields analogous to the `calculate-cost-to-home` routing logic used in Chapters 16 and 17. Use the library to explore behavioral mechanisms before implementing them and to sanity-check emergent outputs against known model behavior.
+- **[NetLogo User Manual](https://ccl.northwestern.edu/netlogo/docs/)** — The authoritative reference for syntax, primitives, and interface construction. The Dictionary section is essential for patch queries (`patches in-radius`, `neighbors4`), agentset operations, and list manipulation. The Programming Guide covers the execution model, specifically that `ask turtles` evaluates agents in random order each tick unless sorted, which has direct implications for managing function call order in a multi-species model.
+- **[NetLogo Modeling Commons](http://modelingcommons.org/)** — A community repository of peer-contributed models. Useful for finding implementations of specific ecological mechanisms and identifying how others have solved common problems such as least-cost pathfinding and tidal forcing.
+- **[NetLogo Forum](https://groups.google.com/g/netlogo-users)** — The primary community support channel. The searchable archive covers everything from performance optimization for large agent populations to GIS extension usage. Searching before posting will usually surface an existing solution.
+- **[BehaviorSpace](https://ccl.northwestern.edu/netlogo/docs/behaviorspace.html)** — NetLogo's built-in experiment tool for automated parameter sweeps, sensitivity analyses, and replicate runs. The `behaviorspace-run-number` primitive allows output file names to be stamped per run automatically. For any applied model intended to support scenario comparison or uncertainty quantification, designing the setup procedure to be BehaviorSpace-compatible from the beginning is strongly recommended.
+
+**Limitations to be aware of.**
+
+- Performance degrades with very large agent populations (tens of thousands of agents with complex behavioral rules)
+- No native integration with machine learning pipelines or external APIs
+- Sharing models with non-NetLogo users requires them to install the software
+- Parallelization is not straightforward
+
+---
+
+### R
+
+**[R](https://www.r-project.org/)** is a statistical computing language with a mature ecosystem for data manipulation, spatial analysis, and visualization. In the context of this book, R is used primarily as a post-processing and analysis environment for outputs exported by NetLogo, though the tutorial models in Chapters 15 and 16 also demonstrate that simple ABMs can be implemented directly in R using data frames and loops.
+
+**What makes R different.** R was designed for statistical analysis, not simulation. It excels at everything that happens after a model runs: cleaning and aggregating output files, computing summary statistics with confidence intervals, building spatial rasters from patch coordinates, and generating publication-quality figures. For ecologists already fluent in R, it is often the most efficient environment for translating model outputs into manuscript figures and decision-support products. The combination of `data.table` for large file processing, `terra` for spatial outputs, and `Shiny` for interactive deployment makes R a powerful end-to-end pipeline for turning NetLogo simulation outputs into accessible decision-support tools.
+
+**When R works as a simulation environment.** For models simple enough that agent state can be represented as rows in a data frame and behavioral rules can be expressed as vectorized operations or `lapply` loops, R is a perfectly adequate simulation engine. The Chapter 15 and 16 tutorial models demonstrate this: no additional framework is required, and the code maps directly onto the NetLogo logic it mirrors. As model complexity grows, however, R's lack of native agent scheduling, spatial primitives, and real-time visualization makes it increasingly cumbersome compared to NetLogo or Mesa.
+
+**Key libraries.**
+
+- **[data.table](https://rdatatable.gitlab.io/data.table/)** — Memory-efficient data manipulation for large agent-level CSV files. Essential when per-agent exports across multiple months, scenarios, and runs exceed available RAM. The streaming approach used in the P-MEM post-processing pipeline processes one file at a time to keep memory usage predictable.
+- **[terra](https://rspatial.github.io/terra/)** — Conversion of NetLogo patch coordinates to georeferenced rasters. Raster outputs are directly compatible with GIS tools and Shiny applications.
+- **[ggplot2](https://ggplot2.tidyverse.org/)** — Publication-quality visualization of simulation outputs.
+- **[Shiny](https://shiny.posit.co/)** — Interactive web application framework. Allows R-based model outputs to be deployed as browser-accessible decision-support tools without requiring end users to run R locally.
+
+**Further reading.**
+
+- [Agent-Based Modeling in R — Computational Social Science Toolbox](https://bookdown.org/f_lennert/book-toolbox_css/agent-based-modeling.html) — A bookdown chapter covering ABM concepts and R-based implementation, situated within a broader computational social science context. Useful for readers coming from a social or behavioral science background.
+- [An Introduction to Agent-Based Modelling in R](https://marcosmolla.wordpress.com/2015/07/16/an-introduction-to-agent-based-modelling-in-r/) — A concise walkthrough of building a simple ABM from scratch using base R, with no additional framework. Useful for understanding the minimal loop structure before adding complexity.
+
+**Limitations to be aware of.**
+
+- No native agent scheduling or spatial grid primitives
+- No real-time visual interface during simulation
+- Memory management requires deliberate design for large output files
+- Slower than Python for compute-intensive simulations
+
+---
+
+### Python
+
+Python is a general-purpose programming language with a large scientific computing ecosystem. Unlike NetLogo, which is purpose-built for agent-based modeling with a visual interface and built-in spatial primitives, Python requires more setup but offers greater flexibility, integration with machine learning and data science workflows, and deployment in production environments. Unlike R, which excels at statistical post-processing of model outputs, Python can serve as both the simulation engine and the analysis environment within a single codebase.
+
+**Key libraries.**
+
+- **[pandas](https://pandas.pydata.org/)** — DataFrame-based agent tables, equivalent to the `tibble` used in the R implementations. Used in Chapters 15 and 16 to store and update agent state across ticks.
+- **[numpy](https://numpy.org/)** — Vectorized numerical operations. Used for distance calculations, angle computation, and movement arithmetic in the schooling and migration functions.
+- **[matplotlib](https://matplotlib.org/)** — Visualization of simulation outputs. Used in Chapters 15 and 16 for migration progress, speed convergence, and STST plots.
+- **[Mesa](https://mesa.readthedocs.io/stable/)** — The most widely used Python ABM framework. Provides built-in agent scheduling, grid environments, and data collection. For models more complex than the tutorials in this book, Mesa provides structure that prevents the simulation loop from becoming unmaintainable. A good starting point is the [Mesa first model tutorial](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html).
+
+**Further reading.**
+
+- [Intro to Agent-Based Modeling in Python](https://towardsdatascience.com/intro-to-agent-based-modeling-3eea6a070b72/) — A practical walkthrough of building a simple ABM from scratch in Python without a framework, useful for understanding what frameworks like Mesa are doing under the hood.
+
+**Limitations to be aware of.**
+
+- No built-in visual interface for watching emergent behavior during development
+- More setup required than NetLogo for spatial grid-based models
+- Larger codebase for equivalent functionality compared to NetLogo
+
+---
+
+### How to Choose a Programming Language
+
+**When to use Python for ABMs.**
+
+- Your model needs to integrate with machine learning pipelines, APIs, or external data streams
+- You are building a model that will be deployed as a web service or run on a remote server
+- Your team is more comfortable in Python than NetLogo or R
+- You need fine-grained control over performance optimization (e.g., vectorized operations with NumPy, parallelization with multiprocessing)
+- The model does not require a real-time visual interface during development
+
+**When NetLogo is the better choice.**
+
+- You need a built-in spatial grid with patch primitives, GIS extension support, and visual debugging during development
+- Your audience includes non-programmers who need to interact with the model through sliders and monitors
+- You are prototyping behavioral rules and want to watch emergent behavior tick by tick
+- The model will be shared with ecologists or managers who are not Python users
+
+**When R is the better choice.**
+
+- Your primary need is post-processing simulation outputs, not running the simulation itself
+- You are doing statistical analysis, spatial visualization with `terra` or `sf`, or building a Shiny dashboard from model results
+- The model is simple enough that a loop over a data frame is sufficient
+
+**Pros and cons.**
+
+| | Python | NetLogo | R |
+|---|---|---|---|
+| Built-in spatial grid | No (manual or Mesa) | Yes | No |
+| Visual interface | No (requires extra tools) | Yes | No |
+| Performance at scale | High (NumPy, multiprocessing) | Moderate | Moderate |
+| Learning curve | Moderate | Low | Moderate |
+| Integration with ML/data pipelines | Excellent | Poor | Good |
+| Deployment as web service | Yes | Difficult | Via Shiny |
+| Community for ecological ABMs | Growing | Large | Small |
+| Reproducibility tooling | pip/conda, Git | Git | renv, Git |
+
+> **Rule of thumb:** Use NetLogo when you are building and debugging behavioral rules. Use Python when you need to scale, automate, or integrate. Use R when you are analyzing and visualizing results.
+
+---
+
+## Code Repositories and Examples
+
+| Project | Repository | Description |
+|---|---|---|
+| **GoFish Behavioral Library** | <https://vmahan1998.github.io/GoFish/> | Complete documentation of all behavioral and physiological submodels. The canonical reference for function signatures, equations, and parameter definitions used throughout this book. |
+| **Penobscot Mercury Exposure Model (P-MEM)** | [GitHub](https://github.com/vmahan1998/Penobscot_Mercury_Exposure.git) \| [Zenodo](https://doi.org/10.5281/ZENODO.19483469) | Full applied implementation: GIS-forced, multi-species, multi-scenario ABM of alewife and striped bass mercury exposure in the Penobscot River Estuary. Includes all input data, BehaviorSpace experiment files, and R post-processing pipeline. |
+| **Mercury Risk Explorer** | <https://vkzfr3-vanessa-mahan.shinyapps.io/Mercury_Risk_Explorer/> | Interactive Shiny application for exploring P-MEM outputs. Spatial exposure maps, temporal risk profiles, and behavioral state time series across predation scenarios. |
+| **Chapter 15 Tutorial — Schooling & Landward Movement** | [NetLogo](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_01/Netlogo) \| [R](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_01/R) \| [Python](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_01/Python) | Minimal integration example: `fd speed` movement with BOIDS schooling, no velocity or energy. |
+| **Chapter 16 Tutorial — Landward Migration & STST** | [NetLogo](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_02/Netlogo) \| [R](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_02/R) \| [Python](https://github.com/vmahan1998/Sample_ABM_Tutorials/tree/main/Simple_Example_02/Python) | Minimal integration example: `fd speed` movement with BOIDS schooling, no velocity or energy. |
+| **Martha's Vineyard** | <https://github.com/vmahan1998/AquinnahHerringMigration> | Predation by striped bass impacting reproduction success in alewives |

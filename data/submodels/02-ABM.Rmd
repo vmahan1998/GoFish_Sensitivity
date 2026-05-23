@@ -1,0 +1,93 @@
+# Agent-Based Models
+```{r, include=FALSE}
+current_chapter <- "02-ABM.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+```{=html}
+<img src="images/abm.png"
+     alt="Agent-Based Models"
+     style="float:left; width:300px; margin:0 20px 15px 0;
+            ">
+```
+
+Agent-based models (ABMs) simulate the behavior of individual organisms—called “agents”—and how their interactions with each other and with their environment create larger-scale patterns. Each agent follows a set of simple rules based on physiology, behavior, or environmental cues. When many agents follow these rules simultaneously, complex system-level outcomes emerge, such as  pathways, schooling patterns, habitat bottlenecks, or exposure hotspots. ABMs are especially useful for ecological systems because they allow researchers and communities to explore how individual decisions scale up to influence population dynamics, habitat use, and risk in changing environments.
+
+ABMs are designed to capture processes that depend on **behavior**, **timing**, **environmental variability**, and **individual differences**. They allow modelers to explore how organisms respond to their surroundings, make movement decisions, and interact with other individuals or species. Because agents experience the environment at fine spatial and temporal scales, ABMs can reveal patterns that occur only when many individuals interact across a dynamic landscape.
+
+### What ABMs Can Help Us Understand
+
+ABMs can answer questions related to:
+
+-   How individual movement decisions accumulate into migration routes or staging locations
+
+-   When and where organisms are most exposed to environmental risks
+
+-   How behaviors such as foraging, schooling, predator avoidance, resting, or spawning influence exposure or survival
+
+-   How variation in traits (size, energy, age, or species) contributes to different outcomes
+
+-   How environmental conditions shape habitat use, movement choices, or interactions between species
+
+-   How system-level patterns emerge from local behaviors and simple rules
+
+-   How alternative conditions or restoration actions might alter movement, habitat use, or exposure
+
+These models are especially useful when management questions depend on **patterns created by individual behavior**, rather than population totals alone.
+
+### What ABMs Are Not Designed to Do
+
+ABMs cannot provide or replace:
+
+-   Exact estimates of population abundance
+
+-   Precise contaminant concentrations inside individual organisms
+
+-   Direct measurements of chemical or physiological processes
+
+-   Predictions of exact numbers of predation or spawning events
+
+-   Large-scale demographic projections without additional modeling components
+
+-   Replacements for field sampling, monitoring programs, or laboratory measurements
+
+Instead, ABMs offer **process-based insight**, showing how behavior and environmental conditions interact to create observable patterns.
+
+### Emergent Behaviors
+
+```{=html}
+<img src="images/emergent_behaviors.png"
+     alt="Emergent Behaviors in Agent-Based Models"
+     style="float:left; width:300px; margin:0 20px 15px 0;
+            ">
+```
+
+Emergent behavior refers to patterns that arise when many individual agents follow their own rules, creating outcomes that cannot be predicted from observing a single fish on its own. These outcomes develop only when many individuals interact with each other and respond to their surrounding environment at the same time. Many ecological processes such as migration timing, habitat bottlenecks, exposure hotspots, schooling dynamics, predator and prey encounters, and shifts in group structure are emergent rather than linear. They form through small, individual decisions that accumulate into larger and sometimes unexpected system-level patterns.
+
+By visualizing and simulating emergence, ABMs make it possible to see how these individual behaviors scale up to influence population level outcomes and habitat use patterns. This helps identify the specific conditions, behaviors, and locations that shape system-wide responses. For management, this is valuable because it shows how small-scale decisions made by individual fish can contribute to broader patterns that influence risk, habitat quality, restoration effectiveness, management actions, and ecological resilience. Understanding emergence allows managers and communities to explore why certain patterns occur, identify potential leverage points, and anticipate how changes in environmental conditions may alter system behavior in the future.
+
+```{=html}
+<div style="display: flex; gap: 20px; justify-content: center;">
+
+  <div style="flex: 1;">
+    <video controls autoplay loop muted style="width: 100%; border-radius: 12px;">
+      <source src="demos/Emergent_Behavior_Two_Agents_speed.mp4" type="video/mp4">
+    </video>
+    <p style="text-align:center; font-size: 0.9em; color: #555;">
+      Emergence at the Individual Scale
+    </p>
+  </div>
+
+  <div style="flex: 1;">
+    <video controls autoplay loop muted style="width: 100%; border-radius: 12px;">
+      <source src="demos/Emergent_Behavior_Multiple_Agents_speed.mp4" type="video/mp4">
+    </video>
+    <p style="text-align:center; font-size: 0.9em; color: #555;">
+      Population-Level Emergence
+    </p>
+  </div>
+
+</div>
+```
+

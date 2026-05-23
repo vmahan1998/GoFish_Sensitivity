@@ -1,0 +1,506 @@
+# Metabolism
+```{r, include=FALSE}
+current_chapter <- "04-Metabolism.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+Metabolism determines the baseline and dynamic energy demand required for fish to maintain physiological function, support movement, regulate ions, digest food, and sustain long-term migration. Within P-MEM, metabolic rate is computed as a function of body size, temperature, and age, following established allometric scaling relationships in ectothermic organisms, particularly fishes (e.g., [@kleiber_body_1932; @west_general_1997; @brown_toward_2004]). Temperature sensitivity is represented using a Q10 formulation consistent with ectothermic metabolic responses [@schmidt_nielsen_animal_1997], while age-dependent scaling reflects ontogenetic changes in metabolic intensity [@glazier_beyond_2005; @glazier_relevance_2023]. Metabolic efficiency, based on divergence from an agent’s optimal temperature, is then used to scale energy allocation across key internal processes including swimming, osmoregulation, and lipid catabolism.
+
+## Purpose
+
+To simulate energetically realistic metabolic costs for migratory fishes
+in coastal and estuarine environments by accounting for size scaling,
+temperature dependence, age effects, and dynamic energy partitioning
+across physiological processes.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+-   **Spatial Unit**: Patch (3 m x 3 m resolution)
+-   **Temporal Unit**: 5-minute time steps (`tick`)
+
+### Global Variables
+
+| Global Variable | Definition |
+|------------------------------------------|------------------------------|
+| **Q10** | Temperature coefficient used for metabolic scaling. |
+| **base-constant** | Global constant for baseline metabolic scaling (0.1). |
+| **age-sensitivity** | Scalar controlling how metabolism changes with age (0.5). |
+
+### Patch Variables
+
+| Variable Name | Definition |
+|----------------------------------------|--------------------------------|
+| **temperature** | The water temperature of the current patch used to calculate temperature dependent metabolic rate. |
+
+### Agent Variables
+
+| Variable Name | Definition |
+|----------------------------------------|--------------------------------|
+| **size** | Body mass or size index used for allometric scaling. |
+| **age-num** | Age used in scaling metabolic rate. |
+| **optimal-temperature** | Preferred temperature at which baseline metabolism is defined. |
+| **max-survival-temp** | Maximum temperature at which the agent can survive and function. |
+| **Met-base** | Baseline metabolic constant calculated during initialization. |
+| **metabolism-rate** | Metabolic rate for the current tick. |
+| **total-metabolism** | Accumulated metabolism over time. |
+| **swim-efficiency** | Efficiency applied to movement when metabolic rate is lower or higher than baseline. |
+| **osmoregulation-efficiency** | Efficiency applied to osmoregultion when metabolic rate is lower or higher than baseline. |
+| **lipid-catabolism-efficiency** | Efficiency applied to lipid catabolism when metabolic rate is lower or higher than baseline. |
+| **swim-base** | Baseline allocation of metabolism toward movement. |
+| **E-base** | Base metabolic maintenance cost. |
+| **E-creation** | Energy cost for creating new chloride cells. |
+| **E-osmo** | Total energy spent on osmoregulation. |
+| **motion-ratio** | Fraction of metabolism allocated to swimming. |
+| **osmo-ratio** | Fraction of metabolism allocated to osmoregulation. |
+| **M-max** | Maximum size for scaling across the population. |
+| **max-age** | Maximum age for scaling across the population. |
+
+## Process Overview and Scheduling
+
+1.  Retrieve patch temperature (°C) and verify safe environmental
+    inputs.
+
+2.  Compute allometric, temperature, and age scalars (dimensionless).
+
+3.  Calculate metabolic rate for the current tick ((energy units)
+    tick⁻¹).
+
+4.  Update metabolic accumulation (energy units).
+
+5.  Compute a reference baseline metabolic rate ((energy units) tick⁻¹).
+
+6.  Apply efficiency multipliers to swimming, digestion, osmoregulation,
+    and lipid catabolism (%).
+
+## Design Concepts
+
+**Basic Principles:** Metabolic rate combines allometric scaling,
+temperature responses, and age scaling consistent with metabolic ecology
+theory (Brown et al., 2004; West et al., 1997; Kleiber, 1932). The model
+uses a Q10 temperature function [@schmidt_nielsen_animal_1997],
+Kleiber-type allometry [@kleiber_body_1932; @west_general_1997], and
+age-dependent reduction in metabolic intensity [@glazier_beyond_2005;
+@glazier_relevance_2023].
+
+**Emergence:** Energetic constraints emerge from interactions among
+size, temperature, and age. These constraints then shape movement,
+digestion, and osmoregulation.
+
+**Adaptation:** Agents adapt by adjusting internal efficiencies that
+influence downstream behavioral and physiological submodels.
+
+**Objectives:** Agents maintain adequate energy for survival and
+migration and balance energetic cost across processes.
+
+**Sensing:** Agents sense the temperature of the patch they occupy.
+
+**Stochasticity:** The function itself is deterministic but stochastic
+variation in individual size and age creates emergent metabolic
+variation.
+
+**Collectives:** Scaling uses the maximum size and age of the entire
+population to normalize differences among individuals.
+
+**Observation:** Outputs include metabolism-rate, total-metabolism, and
+efficiency multipliers.
+
+## Initialization
+
+| Variable | Initialized Value | Justification |
+|:----------------:|:----------------------------:|:----------------------:|
+| Met-base | Computed using size, age, and temperature factors | Establishes a physiologically realistic baseline. |
+| swim-base | Met-base times movement ratio | Allocates baseline metabolism for locomotion. |
+| E-base | Met-base times 0.02 | Maintenance cost of cellular metabolic activity. |
+| E-creation | Met-base times 0.05 | Cost of forming new chloride cells. |
+| motion-ratio | 0.7 normalized | Movement is energetically dominant. |
+| osmo-ratio | 0.3 normalized | Osmoregulation is energetically significant. |
+| E-osmo | 0 | No osmoregulation cost at initialization. |
+| metabolism-rate | Met-base | Baseline metabolism in the absence of environmental variation. |
+| total-metabolism | 0 | Starts accumulation at zero. |
+
+## Submodels
+
+### Initialize Metabolism
+
+Baseline metabolic constant is computed at initialization for each agent
+using species-specific traits and fixed parameter values and remains
+constant across simulation runs:
+
+Baseline metabolic constant is computed using:
+
+$$
+Met_{base} = C_{base} \left(\frac{A_{mass}}{M_{max}}\right)^{0.75} \left[1 + S_{age}\left(1 - \frac{A_{age}}{Age_{max}}\right)\right] \left(\frac{T_{opt}}{T_{max}}\right) \hspace{2cm} \text{(C.1)}
+$$
+
+Where:
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+
+-   $C_{base}$ is the constant baseline coefficient for metabolic
+    initialization, set as 0.1 (dimensionless).
+
+-   $A_{mass}$ is an agent's body mass used for allometric and energetic
+    scaling (g).
+
+-   $M_{max}$ is the maximum body mass across the population (g).
+
+-   $S_{age}$ is the sensitivity parameter controlling age-related
+    metabolic scaling, set to 0.5 (dimensionless).
+
+-   $A_{age}$ is the agent's age in years (years).
+
+-   $Age_{max}$ is the maximum age in the population (years).
+
+-   $T_{opt}$ is the optimal temperature for metabolic performance (°C).
+
+-   $T_{max}$ is the maximum temperature for agent survival, used for
+    normalization (°C).
+
+### Energy Partitions
+
+Baseline energy partitions are computed from the initialized metabolic
+base:
+
+$$
+swim_{base} = Met_{base} \cdot Mt_{ratio}  \hspace{2cm} \text{(C.2)}
+$$
+
+Where:
+
+-   $swim_{base}$ is the baseline energetic cost of swimming ((energy
+    units) tick⁻¹).
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+
+-   $Mt_{ratio}$ is the ratio partitioning metabolic rate to baseline
+    swimming cost (%).
+
+$$
+E_{\text{base}} = Met_{base} \cdot 0.02  \hspace{2cm} \text{(C.3)}
+$$
+
+Where:
+
+-   $E_{base}$ is the baseline cell maintenance energy cost per tick
+    ((energy units) tick⁻¹).
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+
+$$
+E_{\text{creation}} = Met_{base} \cdot 0.05  \hspace{2cm} \text{(C.4)}
+$$
+
+Where:
+
+-   $E_{creation}$ is the energy cost of chloride cell creation scaled
+    by body size ((energy units) tick⁻¹).
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+    
+### Metabolic Rate Calculation
+
+At each tick, metabolism is recalculated using allometric, temperature,
+and age scaling. The 0.75 exponent follows quarter-power scaling
+relationships observed across taxa [@kleiber_body_1932;
+@west_general_1997; @brown_toward_2004]. This formulation reflects
+metabolic scaling relationships in teleost fishes and is applied
+consistently across species, with species-specific differences
+represented through parameter values (e.g., age, body mass, age
+structure, and thermal preferences).
+
+Size Factor:
+
+$$
+Size_{f} = \left(\frac{{A_{mass}}}{M_{max}}\right)^{0.75}  \hspace{2cm} \text{(C.5)}
+$$
+
+Where:
+
+-   $Size_{f}$ is the allometric scaling factor derived from relative
+    body mass (dimensionless).
+
+-   $A_{mass}$ is the agent's body mass used for allometric and
+    energetic scaling (g).
+
+-   $M_{max}$ is the maximum body mass across the population (g).
+
+The Q10 formulation is widely used to represent the temperature
+sensitivity of metabolic rate in ectotherms
+[@schmidt_nielsen_animal_1997; @brown_toward_2004].
+
+The Temperature Factor is implemented as:
+
+$$
+T_{f} = Q_{10}^{\left(\frac{T_{\text{patch}} - T_{\text{opt}}}{10}\right)}  \hspace{2cm} \text{(C.6)}
+$$
+
+Where:
+
+-   $T_{f}$ is the temperature scaling factor applied to metabolism
+    (dimensionless).
+
+-   $Q_{10}$ is the temperature sensitivity coefficient in the Q10
+    formulation (dimensionless).
+
+-   $T_{patch}$ is the local patch temperature experienced by the agent
+    (°C).
+
+-   $T_{opt}$ is the agent's optimal temperature for metabolic
+    performance (°C).
+
+Declines in mass-specific metabolic intensity with ontogeny and aging
+are incorporated using the following age-scaling factor
+[@glazier_beyond_2005; @glazier_relevance_2023]:
+
+The Age Factor is calculated as:
+
+$$
+Age_{f} = 1 + \left(1 - \frac{A_{age}}{Age_{max}}\right)\cdot 0.5  \hspace{2cm} \text{(C.7)}
+$$
+
+Where:
+
+-   \$\$Age\_{f}\$ is the age-based scaling factor modifying metabolic
+    intensity (dimensionless).
+
+-   $A_{age}$ is the agent's age in years (years).
+
+-   $Age_{max}$ is the maximum age in the population (years).
+
+This multiplicative formulation follows the structure of metabolic
+ecology models in which metabolic rate scales as a function of body mass
+and temperature [@brown_toward_2004].
+
+Total metabolic rate:
+
+$$
+Met_{tick} = Met_{base} \cdot 
+Size_{f} \cdot 
+T_{f} \cdot 
+Age_{f}  \hspace{2cm} \text{(C.8)}
+$$
+
+Where:
+
+-   $Met_{tick}$ is the total metabolic rate for the current simulation
+    tick ((energy units) tick⁻¹).
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+
+-   $Size_{f}$ is the allometric scaling factor derived from relative
+    body mass (dimensionless).
+
+-   $T_{f}$ is the temperature scaling factor applied to metabolism
+    (dimensionless).
+
+-   $Age_{f}$ is the age-based scaling factor modifying metabolic
+    intensity (dimensionless).
+
+Metabolic accumulation:
+
+$$
+Met_{total} = Met_{total} + Met_{tick}  \hspace{2cm} \text{(C.9)}
+$$
+
+Where:
+
+-   $Met_{total}$ is the cumulative metabolic expenditure over time
+    (energy units).
+
+-   $Met_{tick}$ is the total metabolic rate for the current simulation
+    tick ((energy units) tick⁻¹).
+    
+### Efficiency Multipliers
+
+A baseline metabolic reference is defined using:
+
+-   baseline size-factor = 1\
+-   baseline age-factor = 1.5\
+-   baseline temp-factor = 1
+
+Thus:
+
+$$
+M_{\text{baseline}} =
+\text{Met-base} \cdot 1 \cdot 1 \cdot 1.5
+$$
+
+Efficiency is computed as:
+
+$$
+Eff = 
+\frac{Met_{tick}}{Met_{base}}  \hspace{2cm} \text{(C.10)}
+$$
+
+Where:
+
+-   $Eff$ is the ratio of current to baseline metabolic rate
+    (dimensionless).
+
+-   $Met_{tick}$ is the total metabolic rate for the current simulation
+    tick ((energy units) tick⁻¹).
+
+-   $Met_{base}$ is the baseline metabolic rate used as the reference
+    for all energetic scaling ((energy units) tick⁻¹).
+
+This value is applied to:
+
+-   $swim_{Eff}$ is the efficiency multiplier applied to swimming
+    energetics (dimensionless).
+
+-   $osmo_{Eff}$ is the efficiency multiplier applied to osmoregulatory
+    costs (dimensionless).
+
+-   $lipid_{Eff}$ is the efficiency multiplier applied to lipid
+    catabolism (%).
+
+Efficiency dynamically scales the cost of movement, ion regulation, and
+lipid catabolism.
+
+## Netlogo Implementation
+
+```{netlogo}
+
+;; ============================
+;;   METABOLISM SUBMODEL
+;; ============================
+
+globals [
+  ;; global physiological constants
+  Q10
+]
+
+patches-own [
+  temperature
+]
+
+fish-own [
+  ;; core state variables
+  weight
+  age-num
+  optimal-temperature
+  max-survival-temp
+
+  ;; metabolic scalars
+  Met-base
+  metabolism-rate
+  total-metabolism
+
+  ;; efficiency multipliers
+  swim-efficiency
+  osmoregulation-efficiency
+  lipid-catabolism-efficiency
+
+  ;; energy partitioning
+  swim-base
+  E-base
+  E-creation
+  E-osmo
+  motion-ratio
+  osmo-ratio
+
+  ;; population normalization
+  M-max
+  max-age
+]
+
+;; ======================================
+;;       INITIALIZE METABOLISM
+;; ======================================
+
+to initialize-metabolism
+  let beta 0.75
+  let age-sensitivity 0.5
+  let base-constant 0.1
+  
+  ;; normalize population scaling
+  set M-max max [weight] of fish
+  set max-age max [age-num] of fish
+  if M-max <= 0 [ set M-max 1 ]
+  if max-age <= 0 [ set max-age 1 ]
+
+  ;; scaling factors
+  let size-factor (weight / M-max) ^ beta
+  let age-factor 1 + age-sensitivity * (1 - (age-num / max-age))
+  let temp-factor (optimal-temperature / max-survival-temp)
+
+  ;; baseline metabolic constant
+  set Met-base base-constant * size-factor * age-factor * temp-factor
+
+  ;; energy partitions
+  let motion-ratio-local 0.7
+  let osmo-ratio-local   0.3
+  let total-ratio (motion-ratio-local + osmo-ratio-local)
+
+  set motion-ratio (motion-ratio-local / total-ratio)
+  set osmo-ratio   (osmo-ratio-local / total-ratio)
+
+  set swim-base (Met-base * motion-ratio)
+  set E-osmo 0
+
+  ;; fixed fractions
+  set E-base     (Met-base * 0.02)
+  set E-creation (Met-base * 0.05)
+
+  ;; initial metabolic state
+  set metabolism-rate Met-base
+  set total-metabolism 0
+end
+
+
+;; ======================================
+;;        CALCULATE METABOLISM EACH TICK
+;; ======================================
+
+to calculate-metabolism
+  let beta 0.75
+
+  ;; repopulate scaling values
+  set M-max max [weight] of fish
+  set max-age max [age-num] of fish
+  if M-max <= 0 [ set M-max 1 ]
+  if max-age <= 0 [ set max-age 1 ]
+
+  ;; get patch temperature safely
+  let T-env [temperature] of patch-here
+  if not is-number? T-env [ set T-env optimal-temperature ]
+
+  ;; scaling factors
+  let size-factor (weight / M-max) ^ beta
+  let temp-factor Q10 ^ ((T-env - optimal-temperature) / 10)
+  let age-factor 1 + (1 - (age-num / max-age)) * 0.5
+
+  ;; metabolic rate (per tick)
+  let M-total Met-base * size-factor * temp-factor * age-factor
+  set metabolism-rate M-total
+  set total-metabolism total-metabolism + M-total
+
+  ;; baseline reference metabolism
+  let baseline-size-factor 1
+  let baseline-age-factor 1.5
+  let baseline-temp-factor 1
+
+  let baseline-metabolism Met-base *
+      baseline-size-factor *
+      baseline-temp-factor *
+      baseline-age-factor
+
+  ;; efficiency multipliers
+  let efficiency M-total / baseline-metabolism
+
+  set swim-efficiency              efficiency
+  set osmoregulation-efficiency    efficiency
+  set lipid-catabolism-efficiency  efficiency
+end
+
+```

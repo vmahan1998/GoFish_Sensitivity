@@ -1,0 +1,278 @@
+# Schooling
+```{r, include=FALSE}
+current_chapter <- "13-Schooling.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+Schooling is an emergent collective behavior in which fish align, cohere, and maintain spacing with nearby conspecifics, increasing hydrodynamic efficiency, predator avoidance, and coordinated migration. Within this model, schooling arises from local interactions among individuals, where agents adjust position, heading, and speed in response to nearby neighbors following the classic behavioral rules of separation, alignment, and cohesion. These rules are consistent with established models of collective fish behavior and agent-based schooling frameworks [@dobon_netlogo_2018; @reynolds_flocks_1987]. As a result, group structure, synchronized movement, and cohesion emerge from decentralized decision-making rather than being imposed at the group level, allowing schooling dynamics to adapt to changing environmental conditions during migration. 
+
+The schooling behavior in this model is adapted from the publicly available NetLogo model [Fish Schooling For Predator Avoidance](https://modelingcommons.org/browse/one_model/5709#model_tabs_browse_info) created by Sebastian Dobon and shared through the NetLogo Modeling Commons. That model implements classic schooling rules from the original BOIDS framework developed by Craig Reynolds in 1987 in his paper *Flocks, Herds, and Schools: A Distributed Behavioral Model* [@reynolds_flocks_1987]. 
+
+## Purpose
+
+The purpose of this submodel is to simulate collective movement patterns observed in migratory fish where individuals adjust their position and speed based on nearby schoolmates. This mechanism enhances group cohesion during landward or seaward migration and produces emergent school structure, directional alignment, and spacing.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+**Spatial Unit:** Patch (3 m x 3 m resolution)\
+**Temporal Unit:** 5 minute time steps (tick)
+
+### Patch Variables
+
+| Variable Name   | Definition                          |
+|-----------------|-------------------------------------|
+| patch-terrain   | Identifies water or land patches    |
+
+### Agent Variables
+
+| Variable Name        | Definition                                                     |
+|----------------------|----------------------------------------------------------------|
+| breed                | Species identity used to restrict schooling to con-specifics    |
+| speed                | Current swimming speed                                          |
+| min-speed            | Lowest allowable swimming speed                                 |
+| start-migration?     | Indicates whether the agent has begun migration                 |
+| landward-migration?  | Indicates landward migration mode                               |
+| seaward-migration?   | Indicates seaward migration mode                                |
+| schoolmates          | Set of nearby con-specifics that meet schooling criteria         |
+| nearest-neighbor     | Closest schoolmate used for spacing and cohesion                |
+| minimum-separation   | Desired minimum inter-fish spacing                              |
+
+## Process Overview and Scheduling
+
+1.  Identify schoolmates based on species identity (categorical) and
+    shared migration state (categorical).
+
+2.  Detect the nearest neighbor among schoolmates (distance, patch
+    units, where 1 patch = 3 m).
+
+3.  Apply separation when neighbors are too close (threshold distance,
+    patch units).
+
+4.  Apply cohesion and alignment when spacing is adequate
+    (distance-based interaction, patch units).
+
+5.  Adjust speed to match group speed and maintain coordination (patch
+    units tick⁻¹).
+
+## Design Concepts
+
+**Basic Principles:** Schooling arises from local interaction rules of
+separation, cohesion, and alignment, implemented through the schooling
+and predator avoidance functions[@dobon_netlogo_2018]. These behavioral
+rules reflect well documented collective dynamics observed in migrating
+fishes, where individuals maintain group structure while balancing
+spacing, directional alignment, and coordinated movement.
+
+**Emergence:** Cohesive schools, spacing patterns, and synchronized
+direction arise without centralized control.
+
+**Adaptation:** Agents adjust heading and speed in response to nearby
+schoolmates.
+
+**Sensing**\
+Agents sense species identity, distance to schoolmates, spacing, and
+local movement direction.
+
+**Interaction**\
+Agents change speed and heading based on interactions with neighbors.
+
+**Stochasticity**\
+Small random turning angles elsewhere in the model introduce variability
+in movement.
+
+**Collectives**\
+Schools form as dynamic collectives with shared direction and spacing
+rules.
+
+**Observation**\
+School size, spacing, direction, and cohesion may be tracked to evaluate
+emergent schooling patterns.
+
+## Initialization
+
+| Variable            | Initialized Value | Justification                                  |
+|---------------------|-------------------|------------------------------------------------|
+| speed               | species specific  | Starting swimming speed                        |
+| min-speed           | species specific  | Prevents schools from stopping entirely        |
+| schoolmates         | empty set         | No neighbors until movement begins             |
+| nearest-neighbor    | none              | Determined dynamically during the simulation   |
+| minimum-separation  | species specific  | Prevents collisions and maintains spacing      |
+
+## Submodels
+
+### Identifying Schoolmates
+
+Fish select schoolmates from nearby con-specifics that share the same
+migration state, including the start of migration and direction
+(landward or seaward).
+
+### Nearest Neighbor
+
+The closest schoolmate is used to determine whether spacing rules or
+cohesion rules should be applied.
+
+### Separation
+
+If the nearest neighbor is closer than the minimum desired separation, the agent turns away to maintain spacing.
+
+### Cohesion
+
+When spacing is appropriate, the agent turns toward the group centroid to maintain cohesive structure.
+
+### Alignment
+
+The agent aligns its heading with the mean direction of nearby con-specifics to maintain synchronized movement.
+
+### Speed Adjustment
+
+Speed is regulated to preserve cohesion within the school:
+
+- The agent accelerates if any schoolmate is significantly faster.  
+- Otherwise, it gradually slows toward the minimum speed.
+
+This produces emergent schooling speeds and prevents fragmentation.
+
+## Netlogo Implementation
+
+```{netlogo}
+;; -------------------------------------------------------------------
+;;  SCHOOLING SUBMODEL — VARIABLE DECLARATIONS
+;; -------------------------------------------------------------------
+
+patches-own [
+  ;; Terrain classification
+  patch-terrain          ;; "water" or "land"
+]
+
+turtles-own [
+  ;; -----------------------------------------------------------------
+  ;; Schooling state variables
+  ;; -----------------------------------------------------------------
+  schoolmates            ;; agentset of nearby con-specifics
+  nearest-neighbor       ;; closest fish in schoolmates
+  minimum-separation     ;; desired distance to avoid collisions
+
+  ;; -----------------------------------------------------------------
+  ;; Migration gating used for schooling eligibility
+  ;; (schoolmates only form among agents sharing these states)
+  ;; -----------------------------------------------------------------
+  start-migration?       ;; has the agent initiated migration?
+  landward-migration?    ;; migrating upstream?
+  seaward-migration?     ;; migrating downstream?
+
+  ;; -----------------------------------------------------------------
+  ;; Swimming parameters affected by schooling
+  ;; -----------------------------------------------------------------
+  speed                  ;; current swimming speed
+  min-speed              ;; lower speed limit to prevent stall
+]
+
+;; -------------------------------------------------------------------
+;;  SCHOOLING: MAIN CONTROLLER
+;; -------------------------------------------------------------------
+
+to school
+  find-schoolmates
+
+  if any? schoolmates [
+    find-nearest-neighbor
+
+    ;; Separation rule
+    ifelse distance nearest-neighbor < minimum-separation
+    [
+      separate
+    ]
+    [
+      ;; Cohesion + alignment rules
+      cohere
+      align
+    ]
+
+    ;; Adjust speed to maintain cohesion
+    adjust-speed
+  ]
+end
+
+
+;; -------------------------------------------------------------------
+;;  FIND SCHOOLMATES (CON-SPECIFICS + SAME MIGRATION MODE)
+;; -------------------------------------------------------------------
+
+to find-schoolmates
+  set schoolmates other turtles with [
+    breed = [breed] of myself and
+    start-migration? and
+    landward-migration? = [landward-migration?] of myself and
+    seaward-migration? = [seaward-migration?] of myself
+  ]
+end
+
+
+;; -------------------------------------------------------------------
+;;  FIND NEAREST NEIGHBOR
+;; -------------------------------------------------------------------
+
+to find-nearest-neighbor
+  set nearest-neighbor min-one-of schoolmates [ distance myself ]
+end
+
+
+;; -------------------------------------------------------------------
+;;  SEPARATION RULE (AVOID COLLISION)
+;; -------------------------------------------------------------------
+
+to separate
+  ;; Turn away from nearest neighbor
+  let dx (dx-of nearest-neighbor)
+  let dy (dy-of nearest-neighbor)
+  rt (random 20 + 160)
+  fd 0.1
+end
+
+
+;; -------------------------------------------------------------------
+;;  COHESION RULE (TURN TOWARD GROUP)
+;; -------------------------------------------------------------------
+
+to cohere
+  if any? schoolmates [
+    face mean-heading-of schoolmates
+  ]
+end
+
+
+;; -------------------------------------------------------------------
+;;  ALIGNMENT RULE (MATCH GROUP HEADING)
+;; -------------------------------------------------------------------
+
+to align
+  if any? schoolmates [
+    set heading (heading + (mean [heading] of schoolmates - heading) * 0.1)
+  ]
+end
+
+
+;; -------------------------------------------------------------------
+;;  SPEED ADJUSTMENT (MAINTAIN COHESION)
+;; -------------------------------------------------------------------
+
+to adjust-speed
+  ifelse max [speed] of schoolmates > speed + 0.1
+  [
+    ;; Accelerate to keep up with group
+    set speed speed + 0.1
+  ]
+  [
+    ;; Slow down toward minimum speed
+    if speed > min-speed [
+      set speed speed - 0.2
+    ]
+  ]
+end
+```
+

@@ -1,0 +1,334 @@
+# Selective Tidal Stream Transport
+```{r, include=FALSE}
+current_chapter <- "14-Selective_Tidal_Stream_Transport.Rmd"
+```
+```{r, child="_download_button.Rmd"}
+```
+
+## Overview
+
+Selective Tidal Stream Transport (STST) is a behavioral strategy that enables agents to conserve energy by alternating between active swimming and passive drift under strong hydrodynamic forcing. Within this submodel, STST is triggered when the along-channel velocity of a patch exceeds an agent’s effective swimming speed and that speed falls below a species-specific minimum threshold. When engaged, agents align with the tidal current and are passively transported upstream or downstream depending on flow direction, reducing the metabolic cost of movement by substituting active swimming with drift.
+
+This behavior is well documented in anadromous and estuarine fishes, where individuals exploit tidal currents to facilitate migration while minimizing energy expenditure [@ForwardTankersley2001; @Gibson2001STST]. Movement during STST is governed by local flow velocity, allowing migration pathways, displacement, and energy savings to emerge dynamically from the interaction between individual swimming capacity and the tidal flow field. STST persists for a limited duration or until swimming ability improves, after which agents resume directional migration.
+
+## Purpose
+
+To simulate a passive energy-conserving behavior in migratory fish that allows them to use tidal currents to move when swimming capacity is insufficient to overcome flow velocities.
+
+## Entities, State Variables, and Scales
+
+### Spatial and Temporal Scales
+
+**Spatial Unit:** Patch (3 m x 3 m resolution)\
+**Temporal Unit:** 5 minute time steps (tick)
+
+### **Global Variables**
+
+| Variable Name | Definition |
+|----|----|
+| **max-seaward-velocity** | Highest magnitude seaward-directed hydrodynamic velocity across the spatial domain. |
+| **max-landward-velocity** | Highest magnitude landward-directed hydrodynamic velocity across the spatial domain. |
+
+### Patch Variables
+
+| Variable Name | Definition |
+|:----------------------------------:|:----------------------------------:|
+| **Velocity** $V_{patch}$ | The along-channel velocity of a given patch, derived from hydrodynamic model inputs, where positive values are in the landward direction and negative values are in the seaward direction. |
+| **tidal-transport-in-patch** | Count of agents exhibiting tidal stream transport within a patch (for habitat quality analysis). |
+
+### Agent Variables
+
+|  |  |
+|:----------------------------------:|:----------------------------------:|
+| **Variable Name** | **Definition** |
+| **energy** $E_{agent}$ | Total energy available to the agent. |
+| **swimming energy** $E_{swim}$ | Energy expenditure from movement per time step. |
+| **base swim energy** $swim_{base}$ | Baseline energy cost of movement. |
+| **swimming difficulty** $D_f$ | Velocity-based proxy representing hydrodynamic resistance. |
+| **in-STST?** $STST_{?}$ | Boolean value indicating if the agent is actively in STST. |
+| **swimming speed** $V_{agent}$ | The effective swimming speed of the agent. |
+| **minimum threshold speed** $Speed_{min}$ | The minimum speed at which an agent will move. |
+
+## Process Overview and Scheduling
+
+1.  Compare swimming speed ($A_{speed}$) with flow speed ($V_{patch}$).
+
+2.  If $|V_{patch}| > A_{speed}$ and $A_{speed} \leq Speed_{min}$, enter
+    STST.
+
+3.  In STST: align with current, update position via drift, apply
+    reduced energy cost.
+
+4.  If $A_{speed} > Speed_{min}$, exit STST and resume active swimming.
+
+## Design Concepts
+
+**Basic Principles:** Selective tidal stream transport (STST) is a
+documented behavioral strategy in anadromous fishes that exploits tidal
+currents to conserve energy during migration (e.g.,
+@ForwardTankersley2001; @Gibson2001STST)
+
+**Emergence:** Passive drift behavior and resulting migration paths
+emerge from agent-flow interactions and individual swimming limitations.
+
+**Adaptation:** Agents adapt their mode of movement based on their
+swimming ability relative to environmental flow, dynamically choosing
+energy-efficient strategies.
+
+**Objectives:** Agents seek to minimizing energy loss in strong flows.
+
+**Sensing:** Agents sense their own $A_{speed}$ and the $V_{patch}$ to
+determine whether passive drift is needed.
+
+**Observation:** Records STST patch events , energy expenditure
+($E_{agent}$), and displacement are logged to analyze behavior across
+flow regimes.
+
+## Initialization
+
+| Variable | Initialized Value | Justification |
+|:----------------------:|:----------------------:|:----------------------:|
+| $V_{agent}$ | Based on size, energy, and difficulty factor | Reflects agent's swimming capability based on metabolic limits. |
+| $swim_{min}$ | Species-specific parameter | Represents the minimum sustained swimming velocity of the agent. |
+| $swim_{max}$ | Species-specific parameter | Represents the maximum sustained swimming velocity of the agent. |
+| $E_{agent}$ | 100 | Assumes full energy at the start of simulation or at spawning. |
+| $swim_{base}$ | $0.02 \cdot \frac{M_{agent}}{M_{max}}^{k}$ | Scales locomotion cost nonlinearly with size; can be calibrated. |
+
+## Submodels
+
+### Trigger Conditions for STST
+
+Agents compare their swimming ability to the flow conditions. If local
+flow exceeds their capability and their effort is below a defined
+threshold, they enter STST:
+
+$$
+ |V_{patch}| > A_{speed} \quad \text{and} \quad A_{speed} \leq Speed_{min}  \hspace{2cm} \text{(C.94)} 
+$$
+
+Where:
+
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $A_{speed}$ is the actual swimming speed used for movement (m s⁻¹).
+-   $Speed_{min}$ is the minimum sustainable swimming speed (m s⁻¹).
+
+While in STST:
+
+Heading aligns with the current (drift vector) & swimming speed is set
+to:
+
+$$
+ A_{speed} = |V_{patch}|  \hspace{2cm} \text{(C.95)} 
+$$
+
+Where:
+
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $A_{speed}$ is the actual swimming speed used for movement (m s⁻¹).
+
+Energy is set as:
+
+$$
+ E_{swim} = swim_{base}  \hspace{2cm} \text{(C.96)} 
+$$
+
+Where:
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $swim_{base}$ is the baseline energetic cost of swimming (energy
+    units).
+
+### Behavior During STST
+
+While in STST, agents align with the current (either landward or
+seaward) and are passively transported:
+
+$$
+ \vec{Y}_{t+1} = \vec{Y}_t + |V_{patch}| \cdot \hat{u}  \hspace{2cm} \text{(C.97)} 
+$$
+
+Where:
+
+-   $\vec{Y}_t$ is the Agent spatial position vector.
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+-   $\hat{u}_{patch}$ is the unit direction vector of patch flow,
+    defined as $\hat{u}_{patch} = V_{patch} / |V_{patch}|$ when
+    $|V_{patch}| > 0$.
+
+Swimming speed is overwritten:
+
+$$
+ A_{speed} = |V_{patch}|  \hspace{2cm} \text{(C.98)} 
+$$
+
+Where:
+
+-   $A_{speed}$ is the actual swimming speed used for movement (m s⁻¹).
+-   $V_{patch}$ is the depth-Averaged along-channel water velocity at
+    the patch (m s⁻¹).
+
+Energy cost is minimized:
+
+$$
+ E_{swim} = swim_{base}  \hspace{2cm} \text{(C.99)} 
+$$
+
+Where:
+
+-   $E_{swim}$ is the energy cost of swimming for the tick (energy
+    units).
+-   $swim_{base}$ is the baseline energetic cost of swimming (energy
+    units).
+    
+### Stop Conditions for STST
+
+Agents exit STST when they regain sufficient swimming capacity to exceed
+threshold:
+
+$$
+ A_{speed} > speed_{min}  \hspace{2cm} \text{(C.100)} 
+$$
+
+Where:
+
+-   $A_{speed}$ is the actual swimming speed used for movement (m s⁻¹).
+-   $speed_{min}$ is the minimum sustainable swimming speed (m s⁻¹).
+
+This triggers a return to active migratory movement and deactivates
+$STST_{?}$.
+
+## Netlogo Implementation
+
+```{netlogo}
+;; -------------------------------------------------------------------
+;;  GLOBALS
+;; -------------------------------------------------------------------
+globals [
+  max-seaward-velocity
+  max-landward-velocity
+  
+  landward-migration?
+  seaward-migration?
+
+  selective-tidal-transport?
+  STST-start-tick
+]
+
+;; -------------------------------------------------------------------
+;;  PATCH VARIABLES
+;; -------------------------------------------------------------------
+patches-own [
+  velocity
+  depth
+  patch-terrain
+  
+  tidal-transport-in-patch
+]
+
+;; -------------------------------------------------------------------
+;;  TURTLE VARIABLES
+;; -------------------------------------------------------------------
+turtles-own [
+  speed
+  min-speed
+  swim-efficiency
+  swim-base
+  difficulty-factor
+  energy
+  E-swim
+  
+  selective-tidal-transport?
+  STST-start-tick
+]
+
+;; -------------------------------------------------------------------
+;;  STST — LANDWARD
+;; -------------------------------------------------------------------
+to selective-tidal-stream-transport-landward
+  let V-patch [velocity] of patch-here
+  let S-swim (speed / 300) ;; 5 minute speed
+
+  ;; Continue drifting (1 tick cooldown)
+  if selective-tidal-transport? and (ticks - STST-start-tick < 1) [
+    let drift-distance abs V-patch * (1 - swim-efficiency)
+    let drift-target one-of neighbors with [patch-terrain = "water"]
+    if drift-target != nobody [ safe-move drift-target drift-distance ]
+    set tidal-transport-in-patch tidal-transport-in-patch + 1
+    stop
+  ]
+
+  ;; Enter STST
+  if abs V-patch > S-swim and S-swim <= min-speed [
+    set selective-tidal-transport? true
+    set STST-start-tick ticks
+    let drift-distance abs V-patch * (1 - swim-efficiency)
+    let drift-target one-of neighbors with [patch-terrain = "water"]
+    if drift-target != nobody [ safe-move drift-target drift-distance ]
+    set tidal-transport-in-patch tidal-transport-in-patch + 1
+    stop
+  ]
+
+  ;; Exit STST → resume active migration
+  if S-swim > min-speed or (ticks - STST-start-tick >= 1) [
+    set selective-tidal-transport? false
+    calculate-swim-energy
+    set energy max list 0 (energy - E-swim)
+    migrate-landward
+  ]
+end
+
+;; -------------------------------------------------------------------
+;;  STST — SEAWARD
+;; -------------------------------------------------------------------
+to selective-tidal-stream-transport-seaward
+  let V-patch [velocity] of patch-here
+  let S-swim (speed / 300)
+
+  ;; Continue STST drift
+  if selective-tidal-transport? and (ticks - STST-start-tick < 1) [
+    let drift-distance abs V-patch * (1 - swim-efficiency)
+    let drift-target one-of neighbors with [patch-terrain = "water"]
+    if drift-target != nobody [ safe-move drift-target drift-distance ]
+    set tidal-transport-in-patch tidal-transport-in-patch + 1
+    stop
+  ]
+
+  ;; Enter STST
+  if abs V-patch > S-swim and S-swim <= min-speed [
+    set selective-tidal-transport? true
+    set STST-start-tick ticks
+    let drift-distance abs V-patch * (1 - swim-efficiency)
+    let drift-target one-of neighbors with [patch-terrain = "water"]
+    if drift-target != nobody [ safe-move drift-target drift-distance ]
+    set tidal-transport-in-patch tidal-transport-in-patch + 1
+    stop
+  ]
+
+  ;; Exit STST → resume seaward migration
+  if S-swim > min-speed or (ticks - STST-start-tick >= 1) [
+    set selective-tidal-transport? false
+    calculate-swim-energy
+    set energy max list 0 (energy - E-swim)
+    migrate-seaward
+  ]
+end
+
+;; -------------------------------------------------------------------
+;;  SAFE MOVEMENT HANDLER
+;; -------------------------------------------------------------------
+to safe-move [target-patch move-speed]
+  face target-patch
+  let next-patch patch-ahead move-speed
+
+  ifelse [patch-terrain] of next-patch = "water" [
+    fd move-speed
+  ] [
+    let nearby-water one-of patches in-radius 1 with [patch-terrain = "water"]
+    if nearby-water != nobody [ move-to nearby-water ]
+  ]
+end
+```
