@@ -40,12 +40,35 @@ MODEL_PATH      = os.getenv(
 NETLOGO_JAVA    = os.getenv("JAVA_PATH", "java")
 
 # ------------------------------------------------------------
-# Anthropic API
+# LLM Provider Configuration
 # ------------------------------------------------------------
 
+LLM_PROVIDER = os.getenv("LLM_PROVIDER", "groq")
+
+# Groq
+GROQ_API_KEY  = os.getenv("GROQ_API_KEY")
+GROQ_MODEL_FAST   = "llama-3.1-8b-instant"      # extraction tasks
+GROQ_MODEL_QUALITY = "llama-3.3-70b-versatile"   # report generation
+GROQ_BASE_URL = "https://api.groq.com/openai/v1"
+
+# xAI Grok
+XAI_API_KEY   = os.getenv("XAI_API_KEY")
+XAI_MODEL     = "grok-beta"
+XAI_BASE_URL  = "https://api.x.ai/v1"
+
+# Google Gemini
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+GOOGLE_MODEL   = "gemini-1.5-flash"
+
+# Ollama local
+OLLAMA_BASE_URL = "http://localhost:11434"
+OLLAMA_MODEL    = "llama3.1"
+
+# Anthropic Claude
 ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY")
 CLAUDE_MODEL      = "claude-sonnet-4-20250514"
-MAX_TOKENS        = 8000
+
+MAX_TOKENS = 8000
 
 # ------------------------------------------------------------
 # Sensitivity analysis settings
