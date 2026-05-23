@@ -1,0 +1,22 @@
+to highlight-patches-with-prey-eaten
+  ask patches [
+    if prey-eaten-in-patch != 0 [
+      set pcolor red ; You can choose any color you want to highlight the patches
+    ]
+  ]
+end
+
+to count-mean-daytime-prey-eaten
+  ;print "Start count-mean-daytime-prey-eaten")
+  
+  ifelse any? stripedbass with [daytime-prey-eaten > 0] [
+    set mean-daytime-prey-eaten mean [daytime-prey-eaten] of stripedbass
+    
+    ;; Output
+    print (word "Mean Daily Prey Eaten: " mean-daytime-prey-eaten)
+  ] [
+    set mean-daytime-prey-eaten 0
+    print (word "Mean Daytime Prey Eaten: " mean-daytime-prey-eaten)
+  ]
+end
+

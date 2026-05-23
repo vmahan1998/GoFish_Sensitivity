@@ -1,0 +1,17 @@
+to adjust-stripedbass-speed ;; predator procedure
+  let travel-distance (speed / 3)
+  set prey-in-front alewives in-radius vision-distance 
+
+  ifelse any? prey-in-front and energy > 0 ;; burst if there is a target and have energy
+  [ set bursting? true ]
+  [ set bursting? false ]
+
+  ifelse bursting?
+  [ if speed <= max-speed
+    [ set speed (speed + (speed * 0.3))
+      let burst-energy (E-swim * 0.3)
+      set energy (energy - burst-energy) ]
+  ]
+  
+  [ set speed (max-speed / 4) ]
+end

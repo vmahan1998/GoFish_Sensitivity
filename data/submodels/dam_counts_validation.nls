@@ -1,0 +1,185 @@
+to count-alewives
+  ;; --------------------------------------------
+;; AFTER THE ALEWIFE MOVES
+;; --------------------------------------------
+
+let old-patch previous-patch
+let new-patch patch-here
+
+;; -------------------------------------------------
+;; 1. Count dam crossing (landward / seaward)
+;; -------------------------------------------------
+let dam-line 342
+let old-y [pycor] of old-patch
+let new-y [pycor] of new-patch
+
+if (old-y < dam-line and new-y >= dam-line and
+    not crossed-dam-landward-today?) [
+  
+  set alewives-on-line-daily-total-landward
+      alewives-on-line-daily-total-landward + 1
+
+  set crossed-dam-landward-today? true
+]
+
+if (old-y >= dam-line and new-y < dam-line and
+    not crossed-dam-seaward-today?) [
+
+  set alewives-on-line-daily-total-seaward
+      alewives-on-line-daily-total-seaward + 1
+
+  set crossed-dam-seaward-today? true
+]
+
+;; -------------------------------------------------
+;; 2. Count estuary entry (SEA → NOT-SEA)
+;; -------------------------------------------------
+let old-type [patchtype] of old-patch
+let new-type [patchtype] of new-patch
+
+if (old-type = "sea" and new-type != "sea" and
+    not entered-estuary-today?) [
+
+  set alewives-entering-estuary-daily-total
+      alewives-entering-estuary-daily-total + 1
+
+  set entered-estuary-today? true
+]
+
+;; -------------------------------------------------
+;; 3. Count estuary exit (NOT-SEA → SEA)
+;; -------------------------------------------------
+if (old-type != "sea" and new-type = "sea" and
+    not exited-estuary-today?) [
+
+  set alewives-exiting-estuary-daily-total
+      alewives-exiting-estuary-daily-total + 1
+
+  set exited-estuary-today? true
+]
+
+end
+
+to count-stripedbass
+  ;; --------------------------------------------
+;; AFTER THE ALEWIFE MOVES
+;; --------------------------------------------
+
+let old-patch previous-patch
+let new-patch patch-here
+
+;; -------------------------------------------------
+;; 1. Count dam crossing (landward / seaward)
+;; -------------------------------------------------
+let dam-line 342
+let old-y [pycor] of old-patch
+let new-y [pycor] of new-patch
+
+if (old-y < dam-line and new-y >= dam-line and
+    not crossed-dam-landward-today?) [
+  
+  set stripedbass-on-line-daily-total-landward
+      stripedbass-on-line-daily-total-landward + 1
+
+  set crossed-dam-landward-today? true
+]
+
+if (old-y >= dam-line and new-y < dam-line and
+    not crossed-dam-seaward-today?) [
+
+  set stripedbass-on-line-daily-total-seaward
+      stripedbass-on-line-daily-total-seaward + 1
+
+  set crossed-dam-seaward-today? true
+]
+
+;; -------------------------------------------------
+;; 2. Count estuary entry (SEA → NOT-SEA)
+;; -------------------------------------------------
+let old-type [patchtype] of old-patch
+let new-type [patchtype] of new-patch
+
+if (old-type = "sea" and new-type != "sea" and
+    not entered-estuary-today?) [
+
+  set stripedbass-entering-estuary-daily-total
+      stripedbass-entering-estuary-daily-total + 1
+
+  set entered-estuary-today? true
+]
+
+;; -------------------------------------------------
+;; 3. Count estuary exit (NOT-SEA → SEA)
+;; -------------------------------------------------
+if (old-type != "sea" and new-type = "sea" and
+    not exited-estuary-today?) [
+
+  set stripedbass-exiting-estuary-daily-total
+      stripedbass-exiting-estuary-daily-total + 1
+
+  set exited-estuary-today? true
+]
+
+end
+
+
+to count-fish-lift
+  let dam-line 342
+
+  let landward count alewives with [
+    pycor >= dam-line and
+    [pycor] of previous-patch < dam-line
+  ]
+
+  let seaward count alewives with [
+    pycor < dam-line and
+    [pycor] of previous-patch >= dam-line
+  ]
+
+  set alewives-on-line-daily-total-landward
+      alewives-on-line-daily-total-landward + landward
+  
+  set alewives-on-line-daily-total-seaward
+      alewives-on-line-daily-total-seaward + seaward
+  
+   ;; debug
+  if ticks mod 288 = 0 [
+    show (word " landward-cross: " alewives-on-line-daily-total-landward
+              " seaward-cross: " alewives-on-line-daily-total-seaward)
+    set alewives-on-line-daily-total-landward 0
+    set alewives-on-line-daily-total-seaward 0
+  ]
+
+end
+
+to count-estuary-entry
+  let entrants count alewives with [
+    [patchtype] of patch-here != "sea" and
+    [patchtype] of previous-patch = "sea"
+  ]
+
+  set alewives-entering-estuary-daily-total
+      alewives-entering-estuary-daily-total + entrants
+  
+  
+  if ticks mod 288 = 0 [
+    show (word " entrants: " alewives-entering-estuary-daily-total)
+    set alewives-entering-estuary-daily-total 0
+  ]
+end
+
+to count-estuary-exit
+  let exiting count alewives with [
+    [patchtype] of patch-here = "sea" and
+    [patchtype] of previous-patch != "sea"
+  ]
+
+  set alewives-exiting-estuary-daily-total
+      alewives-exiting-estuary-daily-total + exiting
+
+  
+  if ticks mod 288 = 0 [
+    show (word " exiters: " alewives-exiting-estuary-daily-total)
+    set alewives-exiting-estuary-daily-total 0
+  ]
+end

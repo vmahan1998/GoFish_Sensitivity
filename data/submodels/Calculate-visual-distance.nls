@@ -1,0 +1,34 @@
+to calculate-vision
+  ;; baseline rho from 2020 population proportions
+  let rho_i (324 / 1952567)
+
+  let H count alewives
+  let B count stripedbass
+
+  ;; HARD OFF SWITCH: no predation
+  if density-multiplier = 0 or H = 0 or B = 0 [
+    set vision-distance 0
+    stop
+  ]
+
+  ;; scaled density
+  let rho ((B / H) * density-multiplier)
+
+  ;; density multiplier relative to baseline
+  let m (rho / rho_i)
+
+  ;; vision scaling (area ∝ distance²)
+  let s (1 / sqrt m)
+
+  ;; clamps
+  if s > 1 [ set s 1 ]
+  if s < 0.05 [ set s 0.05 ]
+
+  ;; apply scaling
+  set vision-distance (base-vision-distance * s)
+
+  ;; minimum ONLY applies when predation is active
+  if vision-distance < min-vision-distance [
+    set vision-distance min-vision-distance
+  ]
+end

@@ -1,0 +1,194 @@
+to forage
+  if landward-migration? = true [
+      set lipid-loss? true
+      set filter-feed? false
+    ]
+    if landward-migration? = true and (weight < (0.3 * original-weight)) [
+      set lipid-loss? false
+      set filter-feed? true
+    ]
+  
+    if seaward-migration? = true and foraging? = true [
+    if [salinity] of patch-here <= 0.5 [
+      set lipid-loss? true
+      set filter-feed? false
+    ] 
+    if [salinity] of patch-here > 0.5 or (weight < (0.3 * original-weight)) [
+      set lipid-loss? false
+      set filter-feed? true
+    ]
+  ]
+  
+      forage-options
+end
+
+to forage-options
+  ;; ==========================================================
+  ;; Alewife foraging behavior based on energy level, migration phase, and SPM preference
+  ;; ==========================================================
+
+  ;; ------------------------------------------
+  ;; 1. LANDWARD MIGRATION (lipid catabolism only)
+  ;; ------------------------------------------
+  if lipid-loss? [
+  ;; Maximum lipid metabolized this step, adjusted by efficiency
+  let lipid-refill 0.5 * (weight / original-weight)
+  ;print (word "lipid-refill: " lipid-refill)
+  ;print (word "current energy: " energy)
+  ;; Calculate deficit and lipid need
+  let energy-deficit (100 - energy)
+  ;print (word "energy-deficit: " energy-deficit)
+  let lipid-needed (energy-deficit / 100)
+  ;print (word "lipid-needed: " lipid-needed)
+  
+  ;; Actual lipid use depends on efficiency and availability
+  let lipid-used (min list lipid-needed lipid-refill)
+  set lipid-used (lipid-used * lipid-catabolism-efficiency)
+  ;print (word "lipid-used: " lipid-used)
+  
+  ;; Convert lipid to energy (scaled by efficiency)
+  let energy-change (lipid-used * 100)
+  ;print (word "energy added: " energy-change)
+  set energy (energy + energy-change)
+  ;print (word "energy after lipid conversion: " energy)
+  if energy > 100 [ 
+    set energy 100 
+    print "energy capped at 100"
+  ]
+  
+  ;; Weight loss proportional to lipid burned
+  set weight weight - (lipid-used)
+  ;print (word "weight after lipid loss: " weight)
+  
+  ;; When relying on lipids, Hg mercury foraging risk stops
+    
+  ;; contaminant bookkeeping
+  let digested-MeHg 0
+  let digested-Hg 0
+
+  set mehg-foraging-total mehg-foraging-total + digested-MeHg
+  set hg-foraging-total hg-foraging-total + digested-Hg
+  set mehg-total mehg-total + digested-MeHg
+  set hg-total hg-total + digested-Hg
+]
+
+;; ------------------------------------------
+;; Active Filter-Feeding with Biomagnification
+;; ------------------------------------------
+if filter-feed? [
+  let spm-sd 25
+  ;; Base filtration capacity scales with body size *and* metabolism
+  let base-filtration ((weight / 100) * metabolism-rate)
+  set base-filtration (base-filtration * digestion-efficiency)
+  let neighbors-list sort (neighbors with [patch-terrain = "water"])
+  let best-patch nobody
+  let best-score -999
+
+  foreach neighbors-list [p ->
+    let spm-patch [SPM] of p
+    let interest exp (- ((spm-patch - optimal-SPM) ^ 2) / (2 * (spm-sd ^ 2)))
+    let benefit (spm-patch * interest * base-filtration)
+    let comp count alewives-on p
+    if comp > 0 [ set benefit benefit / comp ]
+    if benefit > best-score [
+      set best-score benefit
+      set best-patch p
+    ]
+  ]
+
+  if best-patch != nobody and [patch-terrain] of best-patch = "water" [
+    face best-patch
+    move-to best-patch
+  
+    ;; calculate ditance between best patch and previous patch 
+    let travel-distance distancexy previous-x previous-y
+      
+    ;; --- Swimming energy cost (scaled by efficiency) ---
+    set energy max list 0 (energy - (E-swim * travel-distance))
+
+    ;; --- Feeding and digestion (temperature-dependent) ---
+    let patch-spm [SPM] of best-patch
+    let prey-assimilated patch-spm * base-filtration * 300
+      
+    ;; --- Contaminant uptake (SPM × Hg and MeHg) ---
+    let spm-hg [mercury] of best-patch
+    let spm-mehg [methylmercury] of best-patch
+      
+    ;; --- Biomagnification ---
+    let biomag-factor (random-float 30) + 60  ;; random 60–90
+    let hg-assimilated (patch-spm * spm-hg * biomag-factor * prey-assimilated)
+    let mehg-assimilated (patch-spm * spm-mehg * (biomag-factor / 10) * prey-assimilated)
+    set mehg-foraging-undigested mehg-assimilated
+    set hg-foraging-undigested hg-assimilated  
+      
+    mark-foraging-event ;; track foraging  
+    ;; Remaining capacity
+    let space-available (stomach-capacity - stomach-contents)
+
+    ;; You can only eat as much as fits
+    let intake (min (list prey-assimilated space-available))
+
+    ;; Add biomass to stomach
+    set stomach-contents (stomach-contents + intake)
+    set stomach-contents-Hg (stomach-contents-Hg + hg-assimilated);; mercury stomach amount
+    set stomach-contents-MeHg (stomach-contents-MeHg + mehg-assimilated);; methylmercury stomach amount
+
+  ]
+]
+
+end
+to mark-foraging-event  ;; turtle context
+  let sp [breed] of self
+  let hg-risk [hg-foraging-undigested] of self
+  let mehg-risk [mehg-foraging-undigested] of self
+
+  ask patch-here [
+    ;; ----------------------------------
+    ;; basic foraging bookkeeping
+    ;; ----------------------------------
+    set forage-visits forage-visits + 1
+    set forager-count forager-count + 1
+
+    ;set forage-species lput sp forage-species
+
+    ;; ----------------------------------
+    ;; species-specific Hg / MeHg risk
+    ;; ----------------------------------
+    if sp = alewives [
+      ;; spatio-temporal lists
+      set Hg-foraging-risk-alewife hg-risk
+      set MeHg-foraging-risk-alewife mehg-risk
+
+      ;; cumulative spatial totals
+      set Hg-foraging-risk-total-alewife
+        Hg-foraging-risk-total-alewife + hg-risk
+
+      set MeHg-foraging-risk-total-alewife
+        MeHg-foraging-risk-total-alewife + mehg-risk
+    ]
+
+    if sp = stripedbass [
+      ;; spatio-temporal lists
+      set Hg-foraging-risk-stripedbass hg-risk
+      set MeHg-foraging-risk-stripedbass mehg-risk
+    
+
+      ;; cumulative spatial totals
+      set Hg-foraging-risk-total-stripedbass
+        Hg-foraging-risk-total-stripedbass + hg-risk
+
+      set MeHg-foraging-risk-total-stripedbass
+        MeHg-foraging-risk-total-stripedbass + mehg-risk
+    ]
+  ]
+end
+
+to update-SPM-mean-1
+  set mean-SPM mean [SPM] of patches
+end
+
+to color-foraging-patches-1
+  if forage-visits > 0 [
+    set pcolor orange
+  ]
+end
