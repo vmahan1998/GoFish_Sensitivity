@@ -217,10 +217,11 @@ def run_pipeline(
 
 
 if __name__ == "__main__":
+    # in main.py __main__ block, change to:
     run_pipeline(
         skip_extraction  = False,
         skip_experiments = False,
-        skip_running     = True,   # Set True after first run
-        skip_analysis    = False,
-        skip_reports     = False
+        skip_running     = True,   # skip until XML looks good
+        skip_analysis    = True,
+        skip_reports     = True
     )

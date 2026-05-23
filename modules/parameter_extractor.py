@@ -1,131 +1,124 @@
 # ============================================================
 #  parameter_extractor.py
-#  Uses Claude API to extract parameters from ODD + NetLogo code
+#  Reads Rmd + nls files, sends to Groq, returns parameter catalog
 # ============================================================
 
 import json
-import anthropic
+import re
 from pathlib import Path
-from config import ANTHROPIC_API_KEY, CLAUDE_MODEL, MAX_TOKENS
+from config import SUBMODEL_DIR, SUBMODEL_FILES
+from modules.llm_client import call_llm
 
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 
-
-def load_submodel_content(submodel_name: str, submodel_dir: Path) -> dict:
+def load_submodel_content(submodel_name: str) -> dict:
     """
-    Load ODD documentation and NetLogo code for a submodel.
-    Expects files named:
-        {submodel_name}_odd.md
-        {submodel_name}_code.nls
+    Load ODD text from the Rmd chapter and NetLogo code from the nls file.
+    Both live in data/submodels/.
     """
-    odd_path  = submodel_dir / f"{submodel_name}_odd.md"
-    code_path = submodel_dir / f"{submodel_name}_code.nls"
+    files   = SUBMODEL_FILES.get(submodel_name, {})
+    content = {"odd": "", "code": "", "name": submodel_name}
 
-    content = {}
-
-    if odd_path.exists():
-        content["odd"] = odd_path.read_text(encoding="utf-8")
+    # ---- Rmd → ODD text ----
+    rmd_path = SUBMODEL_DIR / files.get("rmd", "")
+    if rmd_path.exists():
+        raw = rmd_path.read_text(encoding="utf-8")
+        # Strip R chunk headers, HTML blocks, netlogo blocks (save separately)
+        nls_from_rmd = re.findall(
+            r"```\{netlogo\}(.*?)```", raw, flags=re.DOTALL
+        )
+        raw = re.sub(r"```\{r[^}]*\}.*?```",   "", raw, flags=re.DOTALL)
+        raw = re.sub(r"```\{=html\}.*?```",     "", raw, flags=re.DOTALL)
+        raw = re.sub(r"```\{netlogo\}.*?```",   "", raw, flags=re.DOTALL)
+        raw = re.sub(r"<[^>]+>",                "", raw)
+        content["odd"]      = raw.strip()
+        content["rmd_code"] = "\n".join(nls_from_rmd)
+        print(f"  Rmd loaded  : {rmd_path.name}  ({len(content['odd'])} chars)")
     else:
-        print(f"  Warning: ODD file not found for {submodel_name}")
-        content["odd"] = ""
+        print(f"  ✗ Rmd missing: {rmd_path}")
 
-    if code_path.exists():
-        content["code"] = code_path.read_text(encoding="utf-8")
+    # ---- nls → NetLogo code ----
+    nls_path = SUBMODEL_DIR / files.get("nls", "")
+    if nls_path.exists():
+        content["code"] = nls_path.read_text(encoding="utf-8")
+        print(f"  nls loaded  : {nls_path.name}  ({len(content['code'])} chars)")
     else:
-        print(f"  Warning: Code file not found for {submodel_name}")
-        content["code"] = ""
+        # Fall back to code blocks extracted from the Rmd
+        content["code"] = content.get("rmd_code", "")
+        print(f"  nls missing : {files.get('nls','')}  (using Rmd code blocks)")
 
     return content
 
 
-def extract_parameters(submodel_name: str, content: dict) -> list[dict]:
-    """
-    Send ODD + code to Claude and extract structured parameter catalog.
-    Returns a list of parameter dictionaries.
-    """
+def extract_parameters(submodel_name: str, content: dict) -> list:
+    """Send ODD + code to Groq and return structured parameter list."""
 
     system_prompt = """
-    You are an ecological modeler specializing in agent-based models
-    of migratory fish. Your task is to extract all parameters from
-    a submodel's ODD documentation and NetLogo code.
+You are an ecological modeler specializing in agent-based models of
+migratory fish. Extract every parameter from the submodel ODD
+documentation and NetLogo code provided.
 
-    For each parameter return a JSON object with these fields:
-    - name: the parameter name as it appears in the code
-    - description: plain language description of what it controls
-    - current_value: the default or initialized value
-    - min_value: biologically plausible minimum
-    - max_value: biologically plausible maximum
-    - units: units of measurement
-    - parameter_type: one of [species_specific, environmental, 
-                               physiological_constant, scaling_exponent]
-    - affects_outputs: list of output variables this parameter influences
-    - appears_in_equations: list of equation numbers from the ODD
-    - sensitivity_priority: one of [high, medium, low] based on where
-                             it appears in equations (exponents = high,
-                             additive constants = low)
-    - cross_submodel_effects: list of other submodels that use this
-                               parameter or are affected by its outputs
+Return a JSON array where each element has exactly these fields:
+  name                   - variable name as it appears in the code
+  description            - plain language description
+  current_value          - default or initialized value
+  min_value              - biologically plausible minimum (number)
+  max_value              - biologically plausible maximum (number)
+  units                  - units of measurement
+  parameter_type         - species_specific | environmental |
+                           physiological_constant | scaling_exponent
+  affects_outputs        - list of output variable names
+  appears_in_equations   - equation numbers from the ODD e.g. ["C.1","C.5"]
+  sensitivity_priority   - high | medium | low
+                           (exponents and multipliers = high,
+                            additive offsets = low)
+  cross_submodel_effects - list of GoFish submodel names downstream
+                           of this parameter
 
-    Return ONLY a valid JSON array. No preamble or explanation.
-    """.strip()
+Return ONLY a valid JSON array. No markdown fences, no explanation.
+""".strip()
 
     user_message = f"""
-    Submodel: {submodel_name}
+Submodel: {submodel_name}
 
-    ODD DOCUMENTATION:
-    {content['odd']}
+ODD DOCUMENTATION:
+{content['odd'][:6000]}
 
-    NETLOGO CODE:
-    {content['code']}
+NETLOGO CODE:
+{content['code'][:3000]}
 
-    Extract all parameters and return as a JSON array.
-    """.strip()
+Extract all parameters and return as a JSON array.
+""".strip()
 
-    print(f"  Extracting parameters for: {submodel_name}")
+    print(f"  Calling Groq: {submodel_name}")
+    raw = call_llm(system_prompt, user_message, quality="fast")
 
-    response = client.messages.create(
-        model   = CLAUDE_MODEL,
-        max_tokens = MAX_TOKENS,
-        messages = [
-            {"role": "user", "content": user_message}
-        ],
-        system = system_prompt
-    )
-
-    raw_text = response.content[0].text.strip()
-
-    # Strip markdown code fences if present
-    if raw_text.startswith("```"):
-        raw_text = raw_text.split("```")[1]
-        if raw_text.startswith("json"):
-            raw_text = raw_text[4:]
+    # Strip markdown fences if the model added them
+    raw = raw.strip()
+    if "```json" in raw:
+        raw = raw.split("```json")[1].split("```")[0]
+    elif "```" in raw:
+        raw = raw.split("```")[1].split("```")[0]
 
     try:
-        parameters = json.loads(raw_text)
-        print(f"  Found {len(parameters)} parameters")
-        return parameters
+        params = json.loads(raw.strip())
+        print(f"  Extracted   : {len(params)} parameters")
+        return params
     except json.JSONDecodeError as e:
-        print(f"  JSON parse error for {submodel_name}: {e}")
-        print(f"  Raw response: {raw_text[:500]}")
+        print(f"  Parse error : {e}")
+        print(f"  Raw snippet : {raw[:300]}")
         return []
 
 
 def extract_all_submodels(submodels: list, submodel_dir: Path) -> dict:
-    """
-    Extract parameters for all submodels and return a combined catalog.
-    """
     catalog = {}
-
     for submodel in submodels:
-        print(f"\nProcessing: {submodel}")
-        content    = load_submodel_content(submodel, submodel_dir)
-        parameters = extract_parameters(submodel, content)
-        catalog[submodel] = parameters
+        print(f"\n{'='*50}\nProcessing: {submodel}")
+        content = load_submodel_content(submodel)
+        params  = extract_parameters(submodel, content)
+        catalog[submodel] = params
 
-        # Save individual catalog
-        out_path = submodel_dir / f"{submodel}_parameters.json"
-        with open(out_path, "w") as f:
-            json.dump(parameters, f, indent=2)
-        print(f"  Saved: {out_path}")
+        out = submodel_dir / f"{submodel}_parameters.json"
+        out.write_text(json.dumps(params, indent=2), encoding="utf-8")
+        print(f"  Saved: {out.name}")
 
     return catalog
